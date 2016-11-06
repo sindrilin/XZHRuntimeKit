@@ -37,9 +37,9 @@ typedef NS_ENUM(NSInteger, XZHPropertyMappedToJsonKeyType) {
 
 
 typedef struct XZHModelContext {
-    void *modelSelf;        // json对象设置到的Foundation对象
-    void *classMapper;      // Foundation对象的objc_class实例的解析类XZHClassMapper对象
-    void *jsonDic;          // 将要解析设置到Foundation对象 JSON Object(1.string 2.data 3.dic)
+    void *model;
+    void *classMapper;
+    void *jsonDic;
 }XZHModelContext;
 
 /**
@@ -91,31 +91,37 @@ static xzh_force_inline NSNumber* XZHNumberWithModelProperty(__unsafe_unretained
  */
 static void XZHSetValueToProperty(__unsafe_unretained id value, __unsafe_unretained id object, __unsafe_unretained XZHPropertyMapper *mapper);
 
-/**
- *  遍历ClassMapper中两个ProeprtyMapper对象数组，从context->_json中取出对应json value，设置到 model对象
- *
- *  @param value    XZHPropertyMapper
- *  @param context  XZHModelContext
- */
 static void XZHModelCFDictionaryApplierFunction(const void *key, const void *value, void *context);
-
-static void XZHModelSimpleKeyCFArrayApplierFunction(const void *value, void *context);
 static void XZHModelKeyPathCFArrayApplierFunction(const void *value, void *context);
 static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *context);
 
 /**
- *  负责描述一个XZHPropertyModel对象
- 
- 1. 主要是描述property与jsonkey的映射关系:
- >>> {@"name":@"name"}
- >>> {@"name":@"user.name"}
- >>> {@"name":@"name", @"title":@"name", @"tip":@"name"}  多个属性对应同一个jsonkey
- >>> {@"id": @[@"id", @"ID", @"Id", @"Uid"]}   一个属性对应多个jsonkey
- >>> {@"uid": @[@"id", @"ID", @"Id", @"Uid"], @"pid": @[@"id", @"ID", @"Id", @"Uid"]}  结合上面两种情况
- 
- 2. Ivar类型是否支持归档
- >>> 类型限制
- >>> 必须实现setter与getter访问方法
+ *  负责描述一个XZHPropertyModel对象，PropertyMapper 的结构:
+ *      - PropertyModel对象
+ *
+ *      - 记录property映射哪一种类型的json key
+ *          - 简单的单个key
+ *              - {name : name}
+ *              - {name : user_name}
+ *          - 带有 `.` 的路径key
+ *              - {name : user.name}
+ *          - 同时映射多个key，且子key可以是单个key，也可以是路径key
+ *              - {name : [name1, name2, name3, user.name]}
+ *
+ *      - 记录property如何映射json key
+ *          - 1 json key : 1 property
+ *          - 1 json key : n property
+ *          - n json key : 1 property
+ *              - {name1 : name}, {name2 : name}, {name3 : name}
+ *              - 这种情况是单链表的结构将所有映射同一个jsonkey的PropertyMapper对象全部串联起来
+ *          - n json key : n property （这种不应该不存在的错误情况）
+ *
+ *  主要是描述property与jsonkey的映射关系:
+ *  - {@"name":@"name"}
+ *  - {@"name":@"user.name"}
+ *  - {@"name":@"name", @"title":@"name", @"tip":@"name"}  多个属性对应同一个jsonkey
+ *  - {@"id": @[@"id", @"ID", @"Id", @"Uid"]}   一个属性对应多个jsonkey
+ *  - {@"uid": @[@"id", @"ID", @"Id", @"Uid"], @"pid": @[@"id", @"ID", @"Id", @"Uid"]}  结合上面两种情况
  */
 @interface XZHPropertyMapper : NSObject {
     @package
@@ -180,11 +186,6 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
      */
     BOOL                        _isGetterAccess;
     BOOL                        _isSetterAccess;
-    
-    /**
-     *  记录属性映射的json key的类型
-     */
-    XZHPropertyMappedToJsonKeyType _mappedToJSONKeyType;
     
     /**
      *  属性映射简单的json key
@@ -265,7 +266,7 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
 
 @interface XZHClassMapper : NSObject {
     @package
-    XZHClassModel               *_classModel;
+    XZHClassModel                      *_classModel;
     
     /**
      *  1、记录所有的属性与jsonkey的映射存储 >>> < jsonkey : PropertyMapper对象 >
@@ -281,7 +282,7 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
      *  key >>> json key
      *  value >>> PropertyMapper对象
      */
-    CFDictionaryRef             _jsonKeyMappedPropertyMapperDic;
+    CFDictionaryRef                    _jsonKeyMappedPropertyMapperDic;
     
     /**
      *  - 记录所有的属性映射规则
@@ -290,19 +291,17 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
      *  - json keyArray
      */
     CFMutableArrayRef                  _allPropertyMappers;
-    CFMutableArrayRef                  _simplePropertyMappers;
     CFMutableArrayRef                  _keyPathPropertyMappers;
     CFMutableArrayRef                  _keyArrayPropertyMappers;
     
     /**
      *  保存容器property对应的class >>> <jsonkey:数组内部对象Class>
      */
-    CFDictionaryRef             _objectInArrayClassDic;
+    CFDictionaryRef                     _objectInArrayClassDic;
     
-    /**
-     *  记录映射json key总个数
-     */
-    CFIndex                     _mappedCount;
+    CFIndex                             _totalMappedCount;
+    CFIndex                             _keyPathMappedCount;
+    CFIndex                             _keyArrayMappedCount;
 }
 
 @end
@@ -313,13 +312,14 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
     CFRelease(_jsonKeyMappedPropertyMapperDic);
     CFRelease(_objectInArrayClassDic);
     CFRelease(_allPropertyMappers);
-    CFRelease(_simplePropertyMappers);
     CFRelease(_keyPathPropertyMappers);
     CFRelease(_keyArrayPropertyMappers);
 }
 
 /**
- *  根据传入的objc_class实例生成 ClassMapper ，并使用objc_class名字进行缓存 ClassMapper
+ *  解析当前NSObject类的objc_class实例
+ *  - (1) 给所有的objc_property实例生成对应的ProeprtyMapper对象
+ *  - (2) 设置objc_property实例配置的映射json key类型到ProeprtyMapper对象
  *
  *  ClassMapper 的结构:
  *      - ClassModel
@@ -330,14 +330,6 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
  *          - json key 1 : PropertyMapper 1
  *          - json key 2 : PropertyMapper 2
  *
- *  PropertyMapper 的结构:
- *      - type encoding 解析
- *      - 记录property如何映射json key
- *          - {name : name}
- *          - {name : user_name}
- *          - {name : user.name}
- *          - {name1 : name}, {name2 : name}, {name3 : name}
- *          - {name : [name1, name2, name3, user.name]}
  */
 + (instancetype)classMapperWithClass:(Class)cls {
     if (cls == Nil) return nil;
@@ -360,16 +352,20 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
         __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:cls];//内部已经多线程同步
         clsMapper = [[XZHClassMapper alloc] init];
         clsMapper->_classModel = clsModel;
-    
+        
+        __block CFIndex totalMappedCount = 0;
+        __block CFIndex keyPathMappedCount = 0;
+        __block CFIndex keyArrayMappedCount = 0;
+        
         CFMutableDictionaryRef jsonKeyMappedPropertyMapperDic = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFMutableArrayRef jsonKeyMappedPropertyMapperArr = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
+        
         CFMutableDictionaryRef objectInArrayClassDic = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        
         CFMutableArrayRef allPropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
-        CFMutableArrayRef simplePropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
         CFMutableArrayRef keyPathPropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
         CFMutableArrayRef keyArrayPropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
         
-        // 记录包含当前类父类中所有的Property的临时数组
+        // 当前类对象的所有属性的名字
         NSMutableArray *allPropertyNames = [[NSMutableArray alloc] initWithArray:[clsModel.propertyMap allKeys]];
         
         /**
@@ -387,7 +383,9 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
             clsTmpModel = clsTmpModel.superClassModel;
         }
         
-        // Array、Set、Dictionary容器数组内部元素类型解析
+        /**
+         *  Array、Set、Dictionary容器数组内部元素类型解析
+         */
         if ([cls respondsToSelector:@selector(xzh_classInArray)]) {
             NSDictionary *classInArrayDic = [(id<XZHJSONMappingConfig>)cls xzh_classInArray];
             [classInArrayDic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull propertyName, id  _Nonnull class, BOOL * _Nonnull stop) {
@@ -396,8 +394,13 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
                         Class cls = NSClassFromString(class);
                         if (cls) {CFDictionarySetValue(objectInArrayClassDic, (__bridge const void *)(propertyName), (__bridge const void *)(cls));}
                     } else {
+                        /**
+                         *  只存储objc对象的类型，不存储类MetaClass的类型
+                         *  - (1) object->isa == Class          >>> 存储class
+                         *  - (2) class->isa == MetaClass       >>> 不存储class
+                         */
                         Class meta = object_getClass(class);
-                        if (meta) {//objc->isa >>>> class, class->isa >>>> meta class
+                        if (meta) {
                             CFDictionarySetValue(objectInArrayClassDic, (__bridge const void *)(propertyName), (__bridge const void *)(class));
                         }
                     }
@@ -405,107 +408,131 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
             }];
         }
         
-        // 移除忽略映射的属性
+        /**
+         *  移除忽略映射的属性
+         */
         NSArray *ignoreJSONKeys = nil;
         if ([cls respondsToSelector:@selector(xzh_ignoreMappingJSONKeys)]) {
             ignoreJSONKeys = [(id<XZHJSONMappingConfig>)cls xzh_ignoreMappingJSONKeys];
         }
         if (ignoreJSONKeys) {[allPropertyNames removeObjectsInArray:ignoreJSONKeys];}
         
-        // 自定义jsonkey与属性映射，<jsonKey:PropertyModel> >>>> <jsonKey:PropertyMapper>
+        /**
+         *  建立自定义jsonkey与属性映射关系 >>> json key 与 PropertyMapper 关系
+         *  格式: <jsonKey : PropertyMapper>
+         */
         if ([cls respondsToSelector:@selector(xzh_customerPropertyNameMappingJSONKey)]) {
             NSDictionary *customerJSONKeyMapping = [(id<XZHJSONMappingConfig>)cls xzh_customerPropertyNameMappingJSONKey];
-            [customerJSONKeyMapping enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull value, BOOL * _Nonnull stop) {
+            [customerJSONKeyMapping enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull value, BOOL * _Nonnull stop)
+            {
                 id jsonKey = value;
                 id propertyName = key;
                 
-                if ([propertyName isKindOfClass:[NSString class]]) {
-                    [allPropertyNames removeObject:propertyName];
-                    
-                    // 取出ClassModel.propertyMap记录的objc_property的ProeprtyModel
-                    __unsafe_unretained XZHPropertyModel *propertyModel = [clsModel.propertyMap objectForKey:propertyName];
-                    if (propertyModel) {
-                        
-                        // 创建新的jsonKey映射的PropertyMapper
-                        Class newMapperContainerCls = CFDictionaryGetValue(objectInArrayClassDic, (__bridge const void *)(propertyName));
-                        XZHPropertyMapper *newMapper = [[XZHPropertyMapper alloc] initWithPropertyModel:propertyModel containerCls:newMapperContainerCls generacCls:cls];
-                        
-                        XZHPropertyMappedToJsonKeyType type = 0;
-                        if ([jsonKey isKindOfClass:[NSString class]]) {
-                            // 情况一、{name : user_name}
-                            // 情况二、{name : user.name}
-                            // 情况三、{name1 : name}, {name2 : name}, {name3 : name}
-                            if ([jsonKey rangeOfString:@"."].location != NSNotFound) {
-                                newMapper->_mappedToKeyPath = jsonKey;
-                                type = XZHPropertyMappedToJsonKeyTypeKeyPath;
-                            } else {
-                                newMapper->_mappedToSimpleKey = jsonKey;
-                                type = XZHPropertyMappedToJsonKeyTypeSimple;
-                            }
-                        } else if ([jsonKey isKindOfClass:[NSArray class]]) {
-                            // 情况四、{name : [name1, name2, name3, user.name]}
-                            newMapper->_mappedToKeyArray = jsonKey;
-                            type = XZHPropertyMappedToJsonKeyTypeKeyArray;
+                if (![propertyName isKindOfClass:[NSString class]]) {return ;}
+                
+                [allPropertyNames removeObject:propertyName];
+                
+                __unsafe_unretained XZHPropertyModel *propertyModel = [clsModel.propertyMap objectForKey:propertyName];
+                if (!propertyModel) {return ;}
+                
+                Class newMapperContainerCls = CFDictionaryGetValue(objectInArrayClassDic, (__bridge const void *)(propertyName));
+                
+                /**
+                 *  创建于当前property相关的PropertyMapper对象，相关参数:
+                 *
+                 *  - (1) objc_property对应的 XZHPropertyModel对象
+                 *  - (2) objc_property如果是Array/Dic/Set容器类型时，内部子对象的Class
+                 *  - (3) objc_property所属NSObject类的Class
+                 */
+                XZHPropertyMapper *newMapper = [[XZHPropertyMapper alloc] initWithPropertyModel:propertyModel containerCls:newMapperContainerCls generacCls:cls];
+                //                        if (!newMapper) {return ;}
+                
+                /**
+                 *  objc_property映射的json key的类型
+                 */
+                XZHPropertyMappedToJsonKeyType type = 0;
+                if ([jsonKey isKindOfClass:[NSString class]]) {
+                    /**
+                     *  情况一、{name : user_name}
+                     *  情况二、{name : user.name}
+                     *  情况三、{name1 : name}, {name2 : name}, {name3 : name}
+                     */
+                    if ([jsonKey rangeOfString:@"."].location != NSNotFound) {
+                        newMapper->_mappedToKeyPath = jsonKey;
+                        type = XZHPropertyMappedToJsonKeyTypeKeyPath;
+                    } else {
+                        newMapper->_mappedToSimpleKey = jsonKey;
+                        type = XZHPropertyMappedToJsonKeyTypeSimple;
+                    }
+                } else if ([jsonKey isKindOfClass:[NSArray class]]) {
+                    /**
+                     *  情况四、{name : [name1, name2, name3, user.name]}
+                     */
+                    newMapper->_mappedToKeyArray = jsonKey;
+                    type = XZHPropertyMappedToJsonKeyTypeKeyArray;
+                }
+                
+                /**
+                 *  统一按照<n属性:1jsonkey>形式使用 _next 串联起来
+                 */
+                __unsafe_unretained XZHPropertyMapper *preMapper = CFDictionaryGetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(jsonKey));
+                if (preMapper) {
+                    // 映射相同jsonkey的PropertyMapper对象只添加一次，后续的都是有 _next 串联起来
+                    newMapper->_next = preMapper;
+                } else {
+                    totalMappedCount++;
+                    CFArrayAppendValue(allPropertyMappers, (__bridge const void *)(newMapper));
+                    switch (type) {
+                        case XZHPropertyMappedToJsonKeyTypeKeyPath: {
+                            CFArrayAppendValue(keyPathPropertyMappers, (__bridge const void *)(newMapper));
+                            keyPathMappedCount++;
+                            break;
                         }
-                        
-                        // 映射任何类型的jsonkey，都应该按照<n属性:1jsonkey>处理
-                        __unsafe_unretained XZHPropertyMapper *preMapper = CFDictionaryGetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(jsonKey));
-                        if (preMapper) {
-                            newMapper->_next = preMapper;
-                        } else {
-                            CFArrayAppendValue(allPropertyMappers, (__bridge const void *)(newMapper));
-                            switch (type) {
-                                case XZHPropertyMappedToJsonKeyTypeSimple: {
-                                    CFArrayAppendValue(simplePropertyMappers, (__bridge const void *)(newMapper));
-                                    break;
-                                }
-                                case XZHPropertyMappedToJsonKeyTypeKeyPath: {
-                                    CFArrayAppendValue(keyPathPropertyMappers, (__bridge const void *)(newMapper));
-                                    break;
-                                }
-                                case XZHPropertyMappedToJsonKeyTypeKeyArray: {
-                                    CFArrayAppendValue(keyArrayPropertyMappers, (__bridge const void *)(newMapper));
-                                    break;
-                                }
-                            }
+                        case XZHPropertyMappedToJsonKeyTypeKeyArray: {
+                            CFArrayAppendValue(keyArrayPropertyMappers, (__bridge const void *)(newMapper));
+                            keyArrayMappedCount++;
+                            break;
                         }
-                        
-                        CFDictionarySetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(jsonKey), (__bridge const void *)(newMapper));
+                        default:
+                            break;
                     }
                 }
+                
+                CFDictionarySetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(jsonKey), (__bridge const void *)(newMapper));
             }];
         }
         
-        // 没有自定义jsonkey与属性映射，<jsonKey:PropertyModel> >>>> <jsonKey:PropertyMapper>
+        /**
+         *  没有自定义jsonkey与属性映射，按照simple jsonkey 映射
+         *  格式: <jsonKey:PropertyMapper>
+         */
         [allPropertyNames enumerateObjectsUsingBlock:^(NSString * _Nonnull propertyName, NSUInteger idx, BOOL * _Nonnull stop) {
-            if ([propertyName isKindOfClass:[NSString class]]) {
-                __unsafe_unretained XZHPropertyModel *propertyModel = [clsModel.propertyMap objectForKey:propertyName];
-                if (propertyModel) {
-                    Class newMapperContainerCls = CFDictionaryGetValue(objectInArrayClassDic, (__bridge const void *)(propertyName));
-                    XZHPropertyMapper *newMapper = [[XZHPropertyMapper alloc] initWithPropertyModel:propertyModel containerCls:newMapperContainerCls generacCls:cls];
-                    CFArrayAppendValue(jsonKeyMappedPropertyMapperArr, (__bridge void*)newMapper);
-                    newMapper->_mappedToSimpleKey = propertyName;
-                    CFArrayAppendValue(simplePropertyMappers, (__bridge const void *)(newMapper));
-                    CFArrayAppendValue(allPropertyMappers, (__bridge const void *)(newMapper));
-                    __unsafe_unretained XZHPropertyMapper *preMapper = CFDictionaryGetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(propertyName));
-                    if (preMapper) {
-                        newMapper->_next = preMapper;
-                    } else {
-                        CFArrayAppendValue(allPropertyMappers, (__bridge const void *)(newMapper));
-                        CFArrayAppendValue(simplePropertyMappers, (__bridge const void *)(newMapper));
-                    }
-                    CFDictionarySetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(propertyName), (__bridge const void *)(newMapper));
-                }
+            if (![propertyName isKindOfClass:[NSString class]]) {return ;}
+            
+            __unsafe_unretained XZHPropertyModel *propertyModel = [clsModel.propertyMap objectForKey:propertyName];
+            if (!propertyModel) {return ;}
+            
+            Class newMapperContainerCls = CFDictionaryGetValue(objectInArrayClassDic, (__bridge const void *)(propertyName));
+            XZHPropertyMapper *newMapper = [[XZHPropertyMapper alloc] initWithPropertyModel:propertyModel containerCls:newMapperContainerCls generacCls:cls];
+            newMapper->_mappedToSimpleKey = propertyName;
+            __unsafe_unretained XZHPropertyMapper *preMapper = CFDictionaryGetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(propertyName));
+            if (preMapper) {
+                newMapper->_next = preMapper;
+            } else {
+                totalMappedCount++;
+                CFArrayAppendValue(allPropertyMappers, (__bridge const void *)(newMapper));
             }
+            CFDictionarySetValue(jsonKeyMappedPropertyMapperDic, (__bridge const void *)(propertyName), (__bridge const void *)(newMapper));
         }];
         
         clsMapper->_jsonKeyMappedPropertyMapperDic = CFDictionaryCreateCopy(CFAllocatorGetDefault(), jsonKeyMappedPropertyMapperDic);
         clsMapper->_objectInArrayClassDic = CFDictionaryCreateCopy(CFAllocatorGetDefault(), objectInArrayClassDic);
         clsMapper->_allPropertyMappers = allPropertyMappers;
-        clsMapper->_simplePropertyMappers = simplePropertyMappers;
         clsMapper->_keyPathPropertyMappers = keyPathPropertyMappers;
         clsMapper->_keyArrayPropertyMappers = keyArrayPropertyMappers;
-        clsMapper->_mappedCount = CFArrayGetCount(allPropertyMappers);
+        clsMapper->_totalMappedCount = totalMappedCount;
+        clsMapper->_keyPathMappedCount = keyPathMappedCount;
+        clsMapper->_keyArrayMappedCount = keyArrayMappedCount;
         
         dispatch_semaphore_wait(_semephore, DISPATCH_TIME_FOREVER);
         CFDictionarySetValue(_cache, clsName, (__bridge const void *)(clsMapper));
@@ -557,31 +584,39 @@ static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *cont
 + (instancetype)_xzh_modelFromJSONDictionary:(NSDictionary *)jsonDic {
     if (![jsonDic isKindOfClass:[NSDictionary class]]) {return nil;}
     
-    // objc_class >>> ClassModel >>> ClassMapper
     XZHClassMapper *clsMapper = [XZHClassMapper classMapperWithClass:[self class]];
-    if (!clsMapper) {return nil;}
-    if (clsMapper->_mappedCount == 0) {return nil;}
+    if (!clsMapper || 0 == clsMapper->_totalMappedCount) {return nil;}
 
-    // 实例化一个实体类对象
     id model = [[self alloc] init];
     if (!model) {return nil;}
     
-    // 组装参数集合Context实例
     XZHModelContext ctx = {0};
-    ctx.modelSelf = (__bridge void*)(model);
-    ctx.jsonDic = (__bridge void *)(jsonDic);
+    ctx.model       = (__bridge void*)(model);
+    ctx.jsonDic     = (__bridge void *)(jsonDic);
     ctx.classMapper = (__bridge void *)(clsMapper);
     
-    // 判断json key count 与 mapped count
-    if (jsonDic.count <= clsMapper->_mappedCount) {
-        // 不需要遍历所有的PropertyMapper来解析json
-        // 首先按照json dic.key 找到对应的PropertyMapper来解析json
+    if (jsonDic.count <= clsMapper->_totalMappedCount) {
+        /**
+         *  此种情况下，不需要遍历所有的PropertyMapper来解析json，因为可能有一些实体类属性对于的jsonvalue不存在
+         *  - (1) 首先按照json dic.key 找到对应的PropertyMapper来解析json
+         *  - (2) 再按照keyPath PropertyMapper来解析json
+         *  - (3) 再按照keyArray PropertyMapper来解析json
+         */
         
-        // 再按照keyPath PropertyMapper来解析json
+        CFDictionaryApplyFunction((CFDictionaryRef)jsonDic, XZHModelCFDictionaryApplierFunction, &ctx);
         
-        // 再按照keyArray PropertyMapper来解析json
+        if(clsMapper->_keyPathMappedCount > 0) {
+            CFArrayApplyFunction(clsMapper->_keyPathPropertyMappers, CFRangeMake(0, clsMapper->_keyPathMappedCount), XZHModelKeyPathCFArrayApplierFunction, &ctx);
+        }
+
+        if(clsMapper->_keyArrayMappedCount > 0) {
+            CFArrayApplyFunction(clsMapper->_keyArrayPropertyMappers, CFRangeMake(0, clsMapper->_keyArrayMappedCount), XZHModelKeyArrayCFArrayApplierFunction, &ctx);
+        }
     } else {
-        
+        /**
+         *  此种情况下，直接遍历所有的PropertyMapper来解析json
+         */
+        NSLog(@"wwwwww");
     }
     return model;
 }
@@ -964,9 +999,8 @@ static xzh_force_inline id XZHGetValueFromDictionaryWithKeyPath(__unsafe_unretai
  */
 static void XZHSetValueToProperty(__unsafe_unretained id value, __unsafe_unretained id object, __unsafe_unretained XZHPropertyMapper *mapper) {
     BOOL isSetterAccess = mapper->_isSetterAccess;
-    if (!isSetterAccess) return;
+    if (!isSetterAccess) {return;}
     SEL setter = mapper->_property.setter;
-    
     if (mapper->_isCNumber) {
         // 1. 数值类型 统一由NSNumber作为中转类型
         NSNumber *number = XZHNumberWithValue(value);
@@ -1358,15 +1392,15 @@ static void XZHSetValueToProperty(__unsafe_unretained id value, __unsafe_unretai
                     if([mapper->_generacCls respondsToSelector:@selector(xzh_classForDictionary:)]) {
                         cls = [mapper->_generacCls xzh_classForDictionary:value];
                     }
-                    id valueObject = [cls _xzh_modelFromJSONDictionary:value];
-                    if (valueObject) {
-                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, valueObject);
+                    id newItem = [cls _xzh_modelFromJSONDictionary:value];
+                    if (newItem) {
+                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, newItem);
                     }
                 }
             }
                 break;
-            case  XZHFoundationTypeUnKnown : {
-                // do nothings ...
+            case  XZHFoundationTypeUnKnown : {//未知类型、自定义NSObject子类
+                //do nothings ...
             }
                 break;
         }
@@ -1485,8 +1519,15 @@ static xzh_force_inline NSArray* XZHGetPropertyMultiJSONKeyArray(__unsafe_unreta
     return [parsedKeyArr copy];
 }
 
+/**
+ *  解析jsonDic
+ *
+ *  @param key     json key
+ *  @param value   json value
+ *  @param context XZHModelContext
+ */
 static void XZHModelCFDictionaryApplierFunction(const void *key, const void *value, void *context) {
-    if (NULL == value || NULL == context) {return;}
+    if (NULL == key || NULL == value || NULL == context) {return;}
     
     /**
      *  使用 __unsafe_unretained 修饰OC对象指针，减少runtime system自动进行retain操作影响代码运行速度
@@ -1494,72 +1535,50 @@ static void XZHModelCFDictionaryApplierFunction(const void *key, const void *val
      *  所以不必担心jsonDic、classMapper、propertyMapper、model 这些对象会被废弃的问题
      */
     XZHModelContext *ctx = (XZHModelContext *)context;
+    __unsafe_unretained id model = (__bridge id)(ctx->model);
+    if (!model) {return;}
     
-    __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);// json在调用这个函数地方被持有，此处不需要对其进行持有
-    if (!jsonDic || ![jsonDic isKindOfClass:[NSDictionary class]]) return;
+    __unsafe_unretained XZHClassMapper *clsMapper = (__bridge XZHClassMapper*)(ctx->classMapper);
+    if (!clsMapper || clsMapper->_totalMappedCount < 1) {return;}
     
-    //    __unsafe_unretained XZHClassMapper *clsMapper = (__bridge XZHClassMapper*)(ctx->classMapper);
-    //    if (!clsMapper || clsMapper->_mappedCount < 1) {return;}
-    
-    __unsafe_unretained XZHPropertyMapper *propertyMapper = (__bridge XZHPropertyMapper*)(value);// XZHPropertyMapper对象被ClassMapper对象所持有，此处不需要对其进行持有
-    while (propertyMapper) {// n 属性:1 jsonkey
-        // 取出json value
-        id jsonValue;
-        
-        if (propertyMapper->_mappedToSimpleKey) {
-            jsonValue = [jsonDic objectForKey:propertyMapper->_mappedToSimpleKey];
-        } else if (propertyMapper->_mappedToKeyPath) {
-            //            @try {
-            //                jsonValue = [jsonDic valueForKeyPath:propertyMapper->_mappedToKeyPath];
-            //            }
-            //            @catch (NSException *exception) {
-            //                jsonValue = nil;
-            //            }
-        } else {
-            //            jsonValue = XZHGetValueFromDictionaryWithMultiJSONKeyArray(jsonDic, propertyMapper->_mappedToKeyArray);
-        }
-        
-        // 对取出的json value做预处理
-        if (jsonValue == (id)kCFNull) {jsonValue = nil;}
-        if (jsonValue) {
-            __unsafe_unretained id modelSelf = (__bridge id)(ctx->modelSelf);
-            if (!modelSelf || (id)kCFNull == modelSelf) {return;}
-            //            XZHSetValueToProperty(jsonValue, modelSelf, propertyMapper);
-        }
-        propertyMapper = propertyMapper->_next;
-    }
-}
-
-static void XZHModelSimpleKeyCFArrayApplierFunction(const void *value, void *context) {
-    if (NULL == value || NULL == context) {return;}
-    
-    XZHModelContext *ctx = (XZHModelContext *)context;
-    __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);
-    if (!jsonDic || ![jsonDic isKindOfClass:[NSDictionary class]]) return;
-    
-//    __unsafe_unretained XZHClassMapper *clsMapper = (__bridge XZHClassMapper*)(ctx->classMapper);
-//    if (!clsMapper || clsMapper->_mappedCount < 1) {return;}
-    
-    __unsafe_unretained XZHPropertyMapper *propertyMapper = (__bridge XZHPropertyMapper*)(value);
+    __unsafe_unretained XZHPropertyMapper *propertyMapper = CFDictionaryGetValue(clsMapper->_jsonKeyMappedPropertyMapperDic, key);
     while (propertyMapper) {
-        id jsonValue = [jsonDic objectForKey:propertyMapper->_mappedToSimpleKey];
-//        if (jsonValue == (id)kCFNull) {jsonValue = nil;}
-//        if (jsonValue) {
-//            __unsafe_unretained id modelSelf = (__bridge id)(ctx->modelSelf);
-//            if (!modelSelf || (id)kCFNull == modelSelf) {return;}
-//                        XZHSetValueToProperty(jsonValue, modelSelf, propertyMapper);
-//        }
+//        XZHSetValueToProperty((__bridge id)value, model, propertyMapper);
         propertyMapper = propertyMapper->_next;
-
     }
 }
 
 static void XZHModelKeyPathCFArrayApplierFunction(const void *value, void *context) {
-    
+    if (NULL == value || NULL == context) {return;}
+    XZHModelContext *ctx = (XZHModelContext *)context;
+    __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);
+    if (!jsonDic || ![jsonDic isKindOfClass:[NSDictionary class]]) return;
+    __unsafe_unretained XZHPropertyMapper *propertyMapper = (__bridge XZHPropertyMapper*)(value);
+    while (propertyMapper) {
+        id jsonValue = [jsonDic valueForKeyPath:propertyMapper->_mappedToKeyPath];
+        if (jsonValue && ((id)kCFNull) != jsonValue) {
+            __unsafe_unretained id modelSelf = (__bridge id)(ctx->model);
+            if (!modelSelf || (id)kCFNull == modelSelf) {return;}
+//            XZHSetValueToProperty(jsonValue, modelSelf, propertyMapper);
+        }
+        propertyMapper = propertyMapper->_next;
+    }
 }
-
 static void XZHModelKeyArrayCFArrayApplierFunction(const void *value, void *context) {
-    
+    if (NULL == value || NULL == context) {return;}
+    XZHModelContext *ctx = (XZHModelContext *)context;
+    __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);
+    if (!jsonDic || ![jsonDic isKindOfClass:[NSDictionary class]]) return;
+    __unsafe_unretained XZHPropertyMapper *propertyMapper = (__bridge XZHPropertyMapper*)(value);
+    while (propertyMapper) {
+        id jsonValue = XZHGetValueFromDictionaryWithMultiJSONKeyArray(jsonDic, propertyMapper->_mappedToKeyArray);
+        if (jsonValue) {
+            __unsafe_unretained id modelSelf = (__bridge id)(ctx->model);
+            if (!modelSelf || (id)kCFNull == modelSelf) {return;}
+//            XZHSetValueToProperty(jsonValue, modelSelf, propertyMapper);
+        }
+        propertyMapper = propertyMapper->_next;
+    }
 }
 
 static xzh_force_inline NSDateFormatter* XZHDateFormatter(__unsafe_unretained NSString *dateFormat) {

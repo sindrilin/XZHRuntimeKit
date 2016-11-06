@@ -91,6 +91,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     else if ([cls isSubclassOfClass:[NSValue class]]) {return XZHFoundationTypeNSValue;}
     else if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
     else if ([cls isSubclassOfClass:XZHGetNSBlockClass()]) {return XZHFoundationTypeNSBlock;}
+    else if ([cls isSubclassOfClass:[NSObject class]]) {return XZHFoundationTypeCustomer;}//last
     else {return XZHFoundationTypeUnKnown;}//未知、自定义类型
 }
 

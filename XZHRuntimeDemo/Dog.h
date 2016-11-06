@@ -52,8 +52,8 @@
 @property (nonatomic, assign) BOOL flag8;
 
 @property (nonatomic, copy) void (^block)();
-@property (nonatomic, strong) NSArray<Animal, Animal2, Animal3> *animales1;
-@property (nonatomic, strong) NSArray<Child *> *animales2;
+//@property (nonatomic, strong) NSArray<Animal, Animal2, Animal3> *animales1;
+//@property (nonatomic, strong) NSArray<Child *> *animales2;
 @end
 
 

@@ -58,7 +58,7 @@ void xzh_setNoNeedDefaultJSONValueHandle();
 + (NSDictionary *)xzh_classInArray;
 
 /**
- *  解析日期字符串的格式
+ *  返回解析日期字符串的格式
  */
 + (NSString *)xzh_dateFormat;
 

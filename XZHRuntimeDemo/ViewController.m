@@ -722,12 +722,12 @@ struct Node {
                 @"name" : @"dog001",
                 @"data" : @{
 //                        @"uid" : @(100001),
-//                        @"uid" : @"100001",
+                        @"uid" : @"100001",
 //                        @"uid" : @"nil",
 //                        @"uid" : @"Nil",
 //                        @"uid" : @"NULL",
 //                        @"uid" : @"null",
-                        @"uid" : @"<null>",
+//                        @"uid" : @"<null>",
 //                        @"uid" : [NSNull null],
                         },
                 @"p_age" : @"21",
@@ -737,6 +737,12 @@ struct Node {
                                 },
                         },
                 @"sex" : @"男",
+                @"animal" : @{
+                        @"cat" : @{
+                                @"c_id" : @"111111",
+                                @"c_name" : @"cat_0000001",
+                                },
+                            },
                 @"cat" : @{
                         @"c_id" : @"111111",
                         @"c_name" : @"cat_0000001",
@@ -764,8 +770,8 @@ struct Node {
                             },
                         
                         ],
-                @"childs" : @[],
-                @"childs" : [NSNull null],
+//                @"childs" : @[],
+//                @"childs" : [NSNull null],
                 @"date" : @"Wed Dec 25 12:22:19 +0800 2013",
                 @"url" : @"http://tp2.sinaimg.cn/3952070245/180/5737272572/0",
                 @"flag1" : @(0),
@@ -777,7 +783,6 @@ struct Node {
                 @"flag7" : @"YES",
                 @"flag8" : @"NO",
                 };
-//    xzh_setNoNeedDefaultJSONValueHandle();
 
     
     double date_s = CFAbsoluteTimeGetCurrent();
@@ -807,10 +812,17 @@ struct Node {
                                 },
                         },
                 @"sex" : @"男",
-                @"cat" : @{
-                        @"c_id" : @"111111",
-                        @"c_name" : @"cat_0000001",
-                        },
+//                @"cat" : @{
+//                        @"c_id" : @"111111",
+//                        @"c_name" : @"cat_0000001",
+//                        },
+                @"animal" : @{
+                            @"cat" : @{
+                                    @"c_id" : @"111111",
+                                    @"c_name" : @"cat_0000001",
+                                    },
+ 
+                            },
                 @"childs" : @[
                         @{
                             @"cid" : @"001",
