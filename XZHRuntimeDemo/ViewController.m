@@ -911,7 +911,7 @@ struct Node {
     double date_s = CFAbsoluteTimeGetCurrent();
     for (int i = 0; i < count; i++) {
 //        [YYModelUserModel yy_modelWithJSON:json];
-        [XZHRuntimeUserModel _xzh_modelFromJSONDictionary:json];
+        [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
     }
     double date_current = CFAbsoluteTimeGetCurrent() - date_s;
     NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);

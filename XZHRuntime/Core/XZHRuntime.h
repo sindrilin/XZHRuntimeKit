@@ -179,7 +179,11 @@ typedef NS_ENUM(NSInteger, XZHTypeEncoding) {
  *  Objective-C Foundation 对象类型，参考Foundation.h中常用的类型
  */
 typedef NS_ENUM(NSInteger, XZHFoundationType) {
-    XZHFoundationTypeUnKnown                                                = 0,//未知类型、Block(@?)
+    XZHFoundationTypeNone   = 0,
+    XZHFoundationTypeNSString,
+    XZHFoundationTypeNSMutableString,
+    XZHFoundationTypeNSNumber,
+    XZHFoundationTypeNSDecimalNumber,
     XZHFoundationTypeNSURL,
     XZHFoundationTypeNSArray,
     XZHFoundationTypeNSMutableArray,
@@ -190,13 +194,9 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
     XZHFoundationTypeNSDate,
     XZHFoundationTypeNSData,
     XZHFoundationTypeNSMutableData,
-    XZHFoundationTypeNSNumber,
-    XZHFoundationTypeNSDecimalNumber,
-    XZHFoundationTypeNSString,
-    XZHFoundationTypeNSMutableString,
     XZHFoundationTypeNSValue,
     XZHFoundationTypeNSNull,
-    XZHFoundationTypeNSBlock,//Foundation中没有直接暴露NSBlock这个类，所以需要单独获取
+    XZHFoundationTypeNSBlock,//Foundation中没有直接暴露NSBlock这个Class，需要使用代码进行获取
     XZHFoundationTypeCustomer,//自定义的NSObject子类
 };
 

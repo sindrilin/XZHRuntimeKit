@@ -1119,7 +1119,7 @@ static void ModelSetWithDictionaryFunction(const void *_key, const void *_value,
     __unsafe_unretained id model = (__bridge id)(context->model);
     while (propertyMeta) {
         if (propertyMeta->_setter) {
-//            ModelSetValueForProperty(model, (__bridge __unsafe_unretained id)_value, propertyMeta);
+            ModelSetValueForProperty(model, (__bridge __unsafe_unretained id)_value, propertyMeta);
         }
         propertyMeta = propertyMeta->_next;
     };
@@ -1148,7 +1148,7 @@ static void ModelSetWithPropertyMetaArrayFunction(const void *_propertyMeta, voi
     
     if (value) {
         __unsafe_unretained id model = (__bridge id)(context->model);
-//        ModelSetValueForProperty(model, value, propertyMeta);
+        ModelSetValueForProperty(model, value, propertyMeta);
     }
 }
 

@@ -73,7 +73,7 @@ Class XZHGetNSBlockClass() {
  *  但是所有的私有内部类都是`继承自类簇类`，也就是`类簇类的子类`
  */
 static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
-    if (NULL == cls) {return XZHFoundationTypeUnKnown;}
+    if (NULL == cls) {return XZHFoundationTypeNone;}
     if ([cls isSubclassOfClass:[NSArray class]]) {return XZHFoundationTypeNSArray;}
     else if ([cls isSubclassOfClass:[NSURL class]]) {return XZHFoundationTypeNSURL;}
     else if ([cls isSubclassOfClass:[NSMutableArray class]]) {return XZHFoundationTypeNSMutableArray;}
@@ -92,11 +92,11 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     else if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
     else if ([cls isSubclassOfClass:XZHGetNSBlockClass()]) {return XZHFoundationTypeNSBlock;}
     else if ([cls isSubclassOfClass:[NSObject class]]) {return XZHFoundationTypeCustomer;}//last
-    else {return XZHFoundationTypeUnKnown;}//未知、自定义类型
+    else {return XZHFoundationTypeNone;}
 }
 
 static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
-    if (!obj) {return XZHFoundationTypeUnKnown;}
+    if (!obj) {return XZHFoundationTypeNone;}
 //    还是不能如下这么写死类型，因为可能随着iOS SDK升级这些类名可能会发生变化、以及集成结构也会变化
 //    Class cls = [obj class];
 //    if (cls == objc_getClass("__NSArrayI") || cls == objc_getClass("__NSArray0")) {return XZHFoundationTypeNSArray;}
@@ -227,7 +227,9 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
             objc_property_attribute_t att = atts[i];
             switch (att.name[0]) {
                 case 'T': {
-                    //name = T, value = @NSString、@NSArray、@Person
+                    _foundationType = XZHFoundationTypeNone;
+                    
+                    //att.name >>> "name = T, value = @NSString、@NSArray、@Person"
                     size_t len = strlen(att.value);
                     if (len < 1) {
                         typeEncoding |= XZHTypeEncodingsUnKnown;
@@ -292,10 +294,12 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                                         free(startArr);startArr = NULL;
                                         free(endArr);endArr = NULL;
                                     }
-                                } else {
-                                    _foundationType = XZHFoundationTypeUnKnown;
                                 }
+                                
+                                // 是否支持KVC
                                 _isKVCCompatible = YES;
+                                
+                                // 数值类型是c数值类型orNSNumber类型
                                 if (_foundationType == XZHFoundationTypeNSNumber || _foundationType == XZHFoundationTypeNSDecimalNumber) {
                                     _isCNumber = NO;
                                 }
