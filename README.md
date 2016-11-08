@@ -466,11 +466,13 @@ Hello World
 
 ![](http://p1.bqimg.com/4851/cab547bf5d1864fc.jpg)
 
-![](http://i1.piimg.com/277a60620c2daa12.jpg)
+- （1） NSObject.class >>> ClassMapper
 
 ```
 Person >>>> Person Class Mapper
 ```
+
+- (2) `objc_class` >>> ClassMapper
 
 ```
 Person Class Mapper 包含:
@@ -478,11 +480,13 @@ Person Class Mapper 包含:
 	- Ivar Model List
 	- Property Model List
 	- Method Model List
-- (2) Dictionary
-	- json key 1 : priperty mapper 1
-	- json key 2 : priperty mapper 2
-	- json key 3 : priperty mapper 3
+- (2) Dictionary 缓存
+	- <json key 1 : priperty mapper 1>
+	- <json key 2 : priperty mapper 2>
+	- <json key 3 : priperty mapper 3>
 ```
+
+- (3) PropertyModel >>> ProeprtyMapper
 
 ```
 Property Mapper 包含:
@@ -490,6 +494,8 @@ Property Mapper 包含:
 	- 映射哪一种类型的json key
 	- 其他辅助属性功能
 ```
+
+- (4) `objc_property` >>> PropertyModel
 
 ```
 Property Model 包含:
