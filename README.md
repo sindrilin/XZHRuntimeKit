@@ -1,0 +1,1983 @@
+##没鸡巴事，寻思着自己弄一个runtime的一些工具库
+
+可能部分代码并不是原创，也有很多是参考自开源库，比如: YYKit ...大神只能膜拜... 算是自己的学习总结，源码学习，自由发挥吧...
+
+下面是记录一些代码实现过程中遇到的一些问题和学习笔记。
+
+##opensouece
+
+http://opensource.apple.com/source/objc4/objc4-237/runtime/
+
+##type encodings
+
+http://opensource.apple.com/source/objc4/objc4-237/runtime/objc-class.h
+
+```c
+/* Definitions of filer types */
+
+#define _C_ID       '@'
+#define _C_CLASS    '#'
+#define _C_SEL      ':'
+#define _C_CHR      'c'
+#define _C_UCHR     'C'
+#define _C_SHT      's'
+#define _C_USHT     'S'
+#define _C_INT      'i'
+#define _C_UINT     'I'
+#define _C_LNG      'l'
+#define _C_ULNG     'L'
+#define _C_FLT      'f'
+#define _C_DBL      'd'
+#define _C_BFLD     'b'
+#define _C_VOID     'v'
+#define _C_UNDEF    '?'
+#define _C_PTR      '^'
+#define _C_CHARPTR  '*'
+#define _C_ARY_B    '['
+#define _C_ARY_E    ']'
+#define _C_UNION_B  '('
+#define _C_UNION_E  ')'
+#define _C_STRUCT_B '{'
+#define _C_STRUCT_E '}'
+```
+
+
+###Property 编码
+
+```c
+typedef struct {
+    const char *name;         //T、V、R、C....  
+    const char *value;        //@NSString、_name、....  
+} objc_property_attribute_t;
+```
+
+```
+`T` >>> 表示属性生成的实例变量的类型编码
+`V` >>> 标示实例变量的名字
+`R` >>> The property is read-only (readonly).
+`C` >>> The property is a copy of the value last assigned (copy).
+`&` >>> The property is a reference to the value last assigned (retain).
+`N` >>> The property is non-atomic (nonatomic).
+`G` >>> The property defines a custom getter sel
+`S` >>> The property defines a custom setter sel
+`D` >>> The property is dynamic (@dynamic)
+`W` >>> The property is a weak reference (__weak)
+`P` >>> The property is eligible for garbage collection
+`t` >>> Specifies the type using old-style encoding
+```
+
+最核心的是`T`，后面跟着的就是属性包含的实例变量的类型:
+
+
+```
+name = T, valie = @NSString
+name = T, valie = @Person
+name = T, valie = i
+
+或
+
+T@NSString、T@Person、Ti
+```
+
+###Ivar 编码
+
+```
+- `c` >>> A char
+- `i` >>> An int
+- `s` >>> A short
+- `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
+- `q` >>> A long long
+- `C` >>> An unsigned char
+- `I` >>> An unsigned int
+- `S` >>> An unsigned short
+- `L` >>> An unsigned long
+- `Q` >>> An unsigned long long
+- `f` >>> A float
+- `d` >>> A double
+- `B` >>> A C++ bool or a C99 _Bool
+- `v` >>> A void
+- `*` >>> A character string (char *)
+- `@` >>> An object (whether statically typed or typed id)
+	- @? >>> NSBlock
+	- @NSArray、@NSString....Foundation类
+	- @User、@Person....自定义类
+- `#` >>> A class object (Class)
+- `:` >>> A method selector (SEL)
+- `[array type]` >>> An array
+- `{name=type...}` >>> A structure
+- `(name=type...)` >>>  A union
+- `bnum` >>> A bit field of num bits
+- `^type` >>> A pointer to type
+- `?` >>> An unknown type (among other things, this code is used for function pointers)
+```
+
+可以大致分为三类:
+
+```
+1. 基本数据类型（int、float、bool、....）
+2. Foundation 对象
+3. c指针类型
+	- char *
+	- struct/union
+	- c array
+	- CoreFoundation 实例
+		- Class、Property、Ivar、Method、SEL、IMP....
+		- CF.....Ref
+```
+
+###Method 编码
+
+```
+- `r` >>> const
+- `n` >>> in
+- `N` >>> inout
+- `o` >>> out
+- `O` >>> bycopy
+- `R` >>> byref
+- `V` >>> oneway
+```
+
+###将这三种编码组合到一个`NS_OPTION`枚举中的结构
+
+```
+- (1) property encodings
+     - `T` >>> 表示属性生成的实例变量的类型编码
+         - `c` >>> A char
+         - `i` >>> An int
+         - `s` >>> A short
+         - `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
+         - `q` >>> A long long
+         - `C` >>> An unsigned char
+         - `I` >>> An unsigned int
+         - `S` >>> An unsigned short
+         - `L` >>> An unsigned long
+         - `Q` >>> An unsigned long long
+         - `f` >>> A float
+         - `d` >>> A double
+         - `B` >>> A C++ bool or a C99 _Bool
+         - `v` >>> A void
+         - `*` >>> A character string (char *)
+         - `@` >>> An object (whether statically typed or typed id)
+         - `#` >>> A class object (Class)
+         - `:` >>> A method selector (SEL)
+         - `[array type]` >>> An array
+         - `{name=type...}` >>> A structure
+         - `(name=type...)` >>>  A union
+         - `bnum` >>> A bit field of num bits
+         - `^type` >>> A pointer to type
+         - `?` >>> An unknown type (among other things, this code is used for function pointers)
+	- `V` >>> 标示实例变量的名字
+	- `R` >>> The property is read-only (readonly).
+	- `C` >>> The property is a copy of the value last assigned (copy).
+	- `&` >>> The property is a reference to the value last assigned (retain).
+	- `N` >>> The property is non-atomic (nonatomic).
+	- `G` >>> The property defines a custom getter sel
+	- `S` >>> The property defines a custom setter sel
+	- `D` >>> The property is dynamic (@dynamic)
+	- `W` >>> The property is a weak reference (__weak)
+	- `P` >>> The property is eligible for garbage collection
+	- `t` >>> Specifies the type using old-style encoding
+ 
+ - (2) method encodings
+    - `r` >>> const
+	- `n` >>> in
+	- `N` >>> inout
+	- `o` >>> out
+	- `O` >>> bycopy
+	- `R` >>> byref
+	- `V` >>> oneway
+```
+
+类型小结
+
+```
+- 基本数值类型
+	- BOOL
+	- char/int8_t
+	- unsigned char/uint8_t
+	- int/int32_t
+	- unsigned int/uint32_t
+	- float
+	- double
+	- short/int16_t
+	- unsigned short/uint16_t
+	- long
+	- unsigned long
+	- long long/int64_t
+	- unsigned long long/uint64_t
+- Foundation Object类型
+	- NSURL
+	- NSArray/NSMutableArray
+	- NSSet/NSMutableSet
+	- NSDictionary/NSMutableDictionary
+	- NSDate
+	- NSData/NSMutableData
+	- NSNumber/NSDecimalNumber
+	- NSString/NSMutableString
+	- NSValue
+	- NSNull
+	- NSBlock
+	- 自定义继承自NSObject类
+- c复杂类型
+	- c 指针类型（char*、int*....）
+	- CoreFoundation结构体实例（Class、Property、Ivar、SEL、Method....）
+	- 自定义struct/union
+```
+
+在NSInvocation.h中也找到了苹果自己定义的type encoding枚举:
+
+```c
+enum _NSObjCValueType {
+    NSObjCNoType = 0,
+    NSObjCVoidType = 'v',
+    NSObjCCharType = 'c',
+    NSObjCShortType = 's',
+    NSObjCLongType = 'l',
+    NSObjCLonglongType = 'q',
+    NSObjCFloatType = 'f',
+    NSObjCDoubleType = 'd',
+    NSObjCBoolType = 'B',
+    NSObjCSelectorType = ':',
+    NSObjCObjectType = '@',
+    NSObjCStructType = '{',
+    NSObjCPointerType = '^',
+    NSObjCStringType = '*',
+    NSObjCArrayType = '[',
+    NSObjCUnionType = '(',
+    NSObjCBitfield = 'b'
+} NS_DEPRECATED(10_0, 10_5, 2_0, 2_0);
+```
+
+##c类型的编码、以及使用NSValue包装
+
+NSValue直接可以支持包裹的 c struct 类型:
+
+```objc
+@interface NSValue (NSValueUIGeometryExtensions)
+
++ (NSValue *)valueWithCGPoint:(CGPoint)point;
++ (NSValue *)valueWithCGVector:(CGVector)vector;
++ (NSValue *)valueWithCGSize:(CGSize)size;
++ (NSValue *)valueWithCGRect:(CGRect)rect;
++ (NSValue *)valueWithCGAffineTransform:(CGAffineTransform)transform;
++ (NSValue *)valueWithUIEdgeInsets:(UIEdgeInsets)insets;
++ (NSValue *)valueWithUIOffset:(UIOffset)insets NS_AVAILABLE_IOS(5_0);
+
+- (CGPoint)CGPointValue;
+- (CGVector)CGVectorValue;
+- (CGSize)CGSizeValue;
+- (CGRect)CGRectValue;
+- (CGAffineTransform)CGAffineTransformValue;
+- (UIEdgeInsets)UIEdgeInsetsValue;
+- (UIOffset)UIOffsetValue NS_AVAILABLE_IOS(5_0);
+
+@end
+```
+
+- (1) CGPoint
+- (2) CGVector
+- (3) CGSize
+- (4) CGRect
+- (5) CGAffineTransform
+- (6) UIEdgeInsets
+- (7) UIOffset
+
+
+如上几种系统c struct在32/64位下有不同的type encodings:
+
+```objc
+NSMutableSet *set = [NSMutableSet new];
+
+// 32 bit
+[set addObject:@"{CGSize=ff}"];
+[set addObject:@"{CGPoint=ff}"];
+[set addObject:@"{CGRect={CGPoint=ff}{CGSize=ff}}"];
+[set addObject:@"{CGAffineTransform=ffffff}"];
+[set addObject:@"{UIEdgeInsets=ffff}"];
+[set addObject:@"{UIOffset=ff}"];
+
+// 64 bit
+[set addObject:@"{CGSize=dd}"];
+[set addObject:@"{CGPoint=dd}"];
+[set addObject:@"{CGRect={CGPoint=dd}{CGSize=dd}}"];
+[set addObject:@"{CGAffineTransform=dddddd}"];
+[set addObject:@"{UIEdgeInsets=dddd}"];
+[set addObject:@"{UIOffset=dd}"];
+types = set;
+```
+
+32位使用`f >>> float`声明成员变量，64位使用`d >>> double`声明成员变量。
+
+以上几种c struct实例直接可以很容易使用NSValue提供的api进行包裹。除了如上几种直接支持的c struct之外，还有自定义的struct类型实例、以及各种c指针类型变量:
+
+
+```objc
+@interface Wife : NSObject
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) long double pro4;
+@property (nonatomic, strong) NSValue *cvalue1;
+@property (nonatomic, strong) NSValue *cvalue2;
+@property (nonatomic, strong) NSValue *cvalue3;
+@property (nonatomic, strong) NSValue *cvalue4;
+@property (nonatomic, strong) NSValue *cvalue5;
+@property (nonatomic, strong) NSValue *cvalue6;
+@property (nonatomic, strong) NSValue *cvalue7;
+@end
+@implementation Wife
+@end
+```
+
+```objc
+struct Node {
+    int value;
+    BOOL isMan;
+    char sex;
+};
+```
+
+```objc
+- (void)testNSValue1 {
+    Wife *obj = [Wife new];
+    
+    //1. NSValue包裹指针类型变量
+    char *s = "Hello World";
+    NSValue *value1 = [NSValue valueWithPointer:s];//默认转换成 void* 类型指针
+    NSLog(@"value1.objcType = %s", value1.objCType);
+    printf("%s\n", value1.pointerValue);
+    
+    //2. NSValue包裹c数组
+    int intArr[5] = {1, 2, 3, 4, 5};
+    NSValue *value2 = [NSValue value:intArr withObjCType:@encode(typeof(intArr))];
+    NSLog(@"value2.objcType = %s", value2.objCType);
+    NSValue *value3 = [NSValue value:intArr withObjCType:"[5i]"];
+    int intArr1[5] = {0};
+    int intArr2[5] = {0};
+    [value2 getValue:&intArr1];
+    [value3 getValue:&intArr2];
+    
+    //3. NSValue包裹 c struct 实例
+    struct Node *node = {0};
+    node = malloc(sizeof(struct Node));
+    node->isMan = YES;
+    node->sex = 'M';
+    node->value = 1999;
+    NSValue *value4 = [NSValue value:node withObjCType:@encode(struct Node)];
+    NSValue *value5 = [NSValue value:node withObjCType:"{Node=iBc}"];
+    NSLog(@"value4.objcType = %s", value4.objCType);
+    struct Node node_1 = {0};
+    struct Node node_2 = {0};
+    [value4 getValue:&node_1];
+    [value5 getValue:&node_2];
+    
+    //3. NSValue包裹 c struct 数组实例
+    struct Node *nodeArr[3] = {0};
+    nodeArr[0] = node;
+    nodeArr[1] = node;
+    nodeArr[2] = node;
+    NSValue *value6 = [NSValue value:nodeArr withObjCType:@encode(typeof(nodeArr))];
+    //NSValue *value7 = [NSValue value:node withObjCType:"[3^{Node=iBc}]"];//错误
+    NSValue *value7 = [NSValue value:node withObjCType:"[3^{Node}]"];//错误
+    NSLog(@"value6.objcType = %s", value6.objCType);
+    struct Node *nodeArr_1[3] = {0};
+    struct Node *nodeArr_2[3] = {0};
+    [value6 getValue:&nodeArr_1];
+    [value7 getValue:&nodeArr_2];
+    
+    //4. objc_msgSend() 设置NSValue
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue1:), value1);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue2:), value2);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue3:), value3);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue4:), value4);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue5:), value5);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue6:), value6);
+    ((void (*)(id, SEL, NSValue*)) (void *) objc_msgSend)(obj, @selector(setCvalue7:), value7);
+    
+    //5. kvc 设置NSValue
+    [obj setValue:value1 forKey:@"_cvalue1"];
+    [obj setValue:value2 forKey:@"_cvalue2"];
+    [obj setValue:value3 forKey:@"_cvalue3"];
+    [obj setValue:value4 forKey:@"_cvalue4"];
+    [obj setValue:value5 forKey:@"_cvalue5"];
+    [obj setValue:value6 forKey:@"_cvalue6"];
+    [obj setValue:value7 forKey:@"_cvalue7"];
+    
+}
+```
+
+输出结果
+
+```
+2016-10-19 23:59:32.968 XZHRuntimeDemo[6709:68837] value1.objcType = ^v
+Hello World
+2016-10-19 23:59:32.969 XZHRuntimeDemo[6709:68837] value2.objcType = [5i]
+2016-10-19 23:59:32.969 XZHRuntimeDemo[6709:68837] value4.objcType = {Node=iBc}
+2016-10-19 23:59:32.969 XZHRuntimeDemo[6709:68837] value6.objcType = [3^{Node}]
+```
+
+```
+(NSConcreteValue *) value1 = 0x00007fe55365a470 <aea27c04 01000000>
+(int [5]) intArr = ([0] = 1, [1] = 2, [2] = 3, [3] = 4, [4] = 5)
+(NSConcreteValue *) value2 = 0x00007fe55370af70 <01000000 02000000 03000000 04000000 05000000>
+(NSConcreteValue *) value3 = 0x00007fe553624fe0 <01000000 02000000 03000000 04000000 05000000>
+(int [5]) intArr1 = ([0] = 1, [1] = 2, [2] = 3, [3] = 4, [4] = 5)
+(int [5]) intArr2 = ([0] = 1, [1] = 2, [2] = 3, [3] = 4, [4] = 5)
+(Node *) node = 0x00007fe5536164c0
+(NSConcreteValue *) value4 = 0x00007fe55365f520 <cf070000 014d0000>
+(NSConcreteValue *) value5 = 0x00007fe553676b70 <cf070000 014d0000>
+(Node) node_1 = (value = 1999, isMan = YES, sex = 'M')
+(Node) node_2 = (value = 1999, isMan = YES, sex = 'M')
+(Node *[3]) nodeArr = {
+  [0] = 0x00007fe5536164c0
+  [1] = 0x00007fe5536164c0
+  [2] = 0x00007fe5536164c0
+}
+(NSConcreteValue *) value6 = 0x00007fe55368c1e0 <c0646153 e57f0000 c0646153 e57f0000 c0646153 e57f0000>
+(NSConcreteValue *) value7 = 0x00007fe553619560 <cf070000 014d0000 032c3655 fe0700d0 00004a88 00000000>
+(Node *[3]) nodeArr_1 = {
+  [0] = 0x00007fe5536164c0
+  [1] = 0x00007fe5536164c0
+  [2] = 0x00007fe5536164c0
+}
+(Node *[3]) nodeArr_2 = {
+  [0] = 0x00004d01000007cf
+  [1] = 0xd00007fe55362c03
+  [2] = 0x00000000884a0000
+}
+(lldb) 
+```
+
+可以小结:
+
+- (1) `[NSValue valueWithPointer:s]`默认转换成`void*`类型指针变量
+- (2) c struct 实例，使用NSValue包装后，可以使用`objc_msgSend()`也可以使用`KVC`的方式设置给实例变量
+
+
+##JSON映射实现结构图
+
+![](http://p1.bqimg.com/4851/cab547bf5d1864fc.jpg)
+
+![](http://i1.piimg.com/277a60620c2daa12.jpg)
+
+```
+Person >>>> Person Class Mapper
+```
+
+```
+Person Class Mapper 包含:
+- (1) Person Class Model
+	- Ivar Model List
+	- Property Model List
+	- Method Model List
+- (2) Dictionary
+	- json key 1 : priperty mapper 1
+	- json key 2 : priperty mapper 2
+	- json key 3 : priperty mapper 3
+```
+
+```
+Property Mapper 包含:
+	- Property Model
+	- 映射哪一种类型的json key
+	- 其他辅助属性功能
+```
+
+```
+Property Model 包含:
+	- objc_property
+	- 解析属性的修饰符、Ivar的类型、数组属性中的对象类型 ....
+```
+
+##JSON中的某一个数据项的类型
+
+```
+- null	>>> kCFNull、[NSNull null] 单例
+	- 需要放置崩溃
+	- 可以通过设置默认值
+- 非null
+	- NSString
+		- NSDate日期字符串
+		- @"1999"
+		- @"1999.111111"
+		- 其他字符串内容
+	- NSNumber
+		- BOOL
+		- char/int8_t
+		- unsigned char/uint8_t
+		- int/int32_t
+		- unsigned int/uint32_t
+		- float
+		- double
+		- short/int16_t
+		- unsigned short/uint16_t
+		- long
+		- unsigned long
+		- long long/int64_t
+		- unsigned long long/uint64_t
+	- 自定义NSObject子类
+	- NSArray
+	- NSDictionary
+	- NSSet
+	- struct 
+```
+
+##NSNumber包裹的数据类型
+
+基本数值类型
+
+```
+BOOL
+char
+double
+float
+int
+NSInteger
+long
+long long
+short
+unsigned char
+unsigned int
+NSUInteger
+unsigned long
+unsigned long long
+unsigned short
+```
+
+NSString类型
+
+```
+NSString*
+NSMutableString*
+```
+
+##NSValue包裹的数据类型
+
+```
+NSPoint
+NSRect
+NSSize
+NSRange
+```
+
+##NSNull防止崩溃
+
+```
+@"NIL" :    (id)kCFNull,
+@"Nil" :    (id)kCFNull,
+@"nil" :    (id)kCFNull,
+@"NULL" :   (id)kCFNull,
+@"Null" :   (id)kCFNull,
+@"null" :   (id)kCFNull,
+@"(NULL)" : (id)kCFNull,
+@"(Null)" : (id)kCFNull,
+@"(null)" : (id)kCFNull,
+@"<NULL>" : (id)kCFNull,
+@"<Null>" : (id)kCFNull,
+@"<null>" : (id)kCFNull};
+```
+                
+
+##JSON Key 与 `objc_property`的映射关系规则
+
+###jsonkey与`objc_property`的映射关系种类
+
+- (1) 1 property : 1 json key >>> 1 : 1
+
+- (2) 1 property : n json key >>> 1 : n
+
+- (3) n property : 1 json key >>> n : 1
+
+
+注意 `n : n` 这是不可能的情况，这样根本就无法解析json。
+
+###代码形式的具体某一个 `json key` 又分为三类:
+
+- (1) 简单的json key，不带路径也不是数组，就是一个简单的string
+
+```
+name、age .... 
+```
+
+- (2) 带有路径的 json key path
+
+```
+data.user.name
+```
+
+- (3) 数组 json key array，此种情况主要针对 `1 property : n json key`
+
+```
+@[@"name", @"user_name", @"uname"] 
+```
+
+但注意，如上的数组中的每一个json key可能又是keyPath路径
+
+```
+@[@"name", @"user.name", @"uname"] 
+```
+
+###当多个属性同时映射一个jsonkey的特殊情况处理
+
+```
+name1 >>> name
+name2 >>> name
+name3 >>> name
+```
+
+并且这种情况不管jsonkey是 (1)、(2)、(3) 都是有可能存在的。
+
+- (1) 多个属性同时映射一个简单的`json key`
+- (2) 多个属性同时映射一个`json keyPath`
+- (3) 多个属性同时映射一个`json KeyArray`
+
+
+###不存在多个属性映射同一个json key
+
+```
+<属性 : json key>
+1. {name : name}
+2. {name : user_name}
+3. {name : user.name}
+4. {name : [name1, name2, name3, user.name]}
+```
+
+- (1) 1、2 可以归结为一种 `mappedTosimpleKey:(NSString *)`
+- (2) 3 归结为 `mappedTokeyPath:(NSString *)`
+- (3) 4 鬼结构 `mappedTokeyArray:(NSArray *)`
+
+所以说对于`PropertyMapper`对象用来描述一个`objc_property`y与`json value item`之间的关系，应该要记录如上三个数据项。
+
+###存在多个属性映射同一个json key
+
+```
+5. {name1 : name}, {name2 : name}, {name3 : name}
+
+6. {name1 : user.name},
+   {name2 : user.name},
+   {name3 : user.name}
+
+7. {name1 : @[@"name", @"user.name", @"user_name"]}, 
+   {name2 : @[@"name", @"user.name", @"user_name"]}, 
+   {name3 : @[@"name", @"user.name", @"user_name"]}
+```
+
+
+单独处理`多个属性 映射 一个json key`的情况，使用`_next`实例变量按照`单链表`的结构依次按照顺序串联起来，这样就不会出现某一个映射关系丢失的问题
+
+| 属性名 | json key |
+|:-------------:|:-------------:|
+| name | user_name |
+| title | user_name |
+| tip | user_name |
+
+- (1) name属性的PropertyMapper对象 >>> `PropertyMapper_name`
+
+- (2) title属性的PropertyMapper对象 >>> `PropertyMapper_title`
+
+- (3) tip属性的PropertyMapper对象 >>> `PropertyMapper_tip`
+
+
+`PropertyMapper_name、PropertyMapper_title、PropertyMapper_tip`三者之间的关系:
+
+缓存字典的name jsonKey只保存最后一个解析属性 `PropertyMapper_tip`
+
+```objc
+dic = {
+	jsonKey : PropertyMapper_tip
+}
+```
+
+但是`PropertyMapper_tip`依次讲前面的两个串联起来
+
+```
+PropertyMapper_tip->_next == PropertyMapper_title
+```
+
+```
+PropertyMapper_tip->_title == PropertyMapper_name
+```
+
+还有一种是上面情况的扩展，即不同属性映射的jsonKey此时不是一个简单的key，而是`多个key`
+
+```
+//{属性 : json key 数组}
+
+@{
+	....
+	@"uid" : @[@"id",@"uid",@"UserId",@"User.id"],
+	@"pid" : @[@"id",@"uid",@"UserId",@"User.id"],
+	....
+}
+```
+
+那么数组`@[@"id",@"uid",@"UserId",@"User.id"]`就是保存PropertyMapper对象到字典的key（只要实现了NSCopying协议的对象都可以作为字典的key）。
+
+![](http://i1.piimg.com/ee87eb2dff87aff8.png)
+
+这样一来，如果有多个不同的属性映射同一个jsonKey（key、keyPath、keyArray）时，通过`PropertyMapper->_next`进行链式串联起来。
+
+##json key、`objc_property`、property model、property mapper 之间的关系
+
+
+
+```
+property mapper
+	- property model
+		- objc_property
+	- 记录 property model 如何 映射 json key
+		- {name : name}		
+		- {name : user_name}
+		- {name : user.name}
+		- {name : [name1, name2, name3, user.name]}
+		- {name1 : name}, {name2 : name}, {name3 : name}
+```
+
+##ClassMapper 描述 一个json 与 一个model之间所有的jsonkey与property具体如何映射，也就是管理所有的PropertyMapper
+
+个人分析对于一个json与model之间映射的关系结构:
+
+```
+ClassMapper:
+	- default（没有自定义映射关系）
+		- simple json key
+			- 1 属性 : 1 json key
+			- n 属性 : 1 json key
+	- customer（自定义映射关系）
+		- simple json key
+			- 1 属性 : 1 json key
+			- n 属性 : 1 json key
+		- json keyPath
+			- 1 属性 : 1 json key
+			- n 属性 : 1 json key
+		- json key array
+			- 1 属性 : 1 json key
+			- n 属性 : 1 json key
+			- 1 属性 : n json key
+```
+
+##ClassMapper包装一个`objc_class`与json的映射关系时，由于可能多次重复性解析，所以做了内存缓存，并使用semephore完成线程同步
+
+```objc
++ (instancetype)classMapperWithClass:(Class)cls {
+    if (cls == Nil) return nil;
+    
+    //1. 单利缓存字典、同步信号量 初始化
+    static CFMutableDictionaryRef _cache;
+    static dispatch_semaphore_t _semephore;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        _cache = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        _semephore = dispatch_semaphore_create(1);
+    });
+    
+    //2. 缓存 ClassMapper 的key
+    const void *clsName =  (__bridge const void *)(NSStringFromClass(cls));
+    
+    //3. 先读缓存是否已经存在解析完毕的Mapper对象
+    dispatch_semaphore_wait(_semephore, DISPATCH_TIME_FOREVER);
+    XZHClassMapper *clsMapper = CFDictionaryGetValue(_cache, clsName);
+    dispatch_semaphore_signal(_semephore);
+   
+   //4. 如果缓存没有，再进行解析，并最后将解析的Mapper对象缓存起来
+   if (!clsMapper) {
+   		
+   		//4.1 解析开始，开始多线程同步
+   		dispatch_semaphore_wait(_semephore, DISPATCH_TIME_FOREVER);
+   		
+   		//4.2 完成对 objc_class 的解析
+   		//生成: nethods、ivars、properties、categories、protocols  .... 的对应的model
+   		
+   		//4.3  解析结束，结束多线程同步
+   		dispatch_semaphore_signal(_semephore);
+	}
+	
+	return clsMapper;
+}
+    
+```
+
+##PropertyMapper
+
+- (1) 三个重要的Class实例变量
+
+```objc
+Class                       _generacCls;        // 属性所属的实体类class
+Class                       _containerCls;      // 容器属性变量内部元素的Class
+Class                       _ivarClass;         // 当前属性变量的Class
+```
+
+- (2) 记录属性映射的jsonKey类型
+
+```objc
+NSString                    *_mappedToSimpleKey;
+NSString                    *_mappedToKeyPath;
+NSArray                     *_mappedToManyKey;
+```
+
+- (3) 如果出现多个属性映射同一个jsonkey，使用next指针串联起来
+
+
+```objc
+XZHPropertyMapper         *_next;
+```
+
+
+##KVC不支持long double类型、c pointer(such as SEL/CoreFoundation object)
+
+```
+1. long double 基本数值类型
+2. c 指针类型 
+	2.1 char*、int* .... （不包含结构体指针类型）
+	2.2 CoreFoundation object
+```
+
+##KVC默认会将int、float、double等基本数据类型转换成NSNumber类簇类的对象
+
+```objc
+@interface TestObj : NSObject
+@property (nonatomic, strong) NSNumber *value1;
+@property (nonatomic, assign) NSInteger value2;
+@property (nonatomic, assign) CGFloat value3;
+@end
+@implementation TestObj
+- (NSString *)description {
+    return [NSString stringWithFormat:@"_value1 = %@, _value2 = %ld, _value3 = %lf", _value1, _value2, _value3];
+}
+@end
+```
+
+```objc
+@implementation ViewController
+
+- (void)test {
+	id dic = @{
+           @"key1" : @(19),
+           @"key2" : @{
+                   @"key3" : @(20),
+                   },
+           };
+	
+	//1. NSNumber >>> int、float、double...
+	id value1 = [dic valueForKey:@"key1"];
+	id value2 = [dic valueForKeyPath:@"key2.key3"];
+    NSLog(@"value1.class = %@", [value1 class]);
+    NSLog(@"value2.class = %@", [value2 class]);
+    
+	//2. int、float、double... >>> NSNumber
+	TestObj *obj = [TestObj new];
+	[obj setValue:@(1) forKey:@"_value1"];
+	[obj setValue:@(2) forKey:@"_value2"];
+	[obj setValue:@(3.0) forKey:@"_value3"];
+	NSLog(@"%@", obj);
+	
+	NSLog(@"value1 = %@, class = %@", [obj valueForKey:@"_value1"], [[obj valueForKey:@"_value1"] class]);
+	NSLog(@"value2 = %@, class = %@", [obj valueForKey:@"_value2"], [[obj valueForKey:@"_value2"] class]);
+	NSLog(@"value3 = %@, class = %@", [obj valueForKey:@"_value3"], [[obj valueForKey:@"_value3"] class]);
+}
+
+@end
+```
+
+输出结果
+
+```
+2016-10-26 13:24:55.187 XZHRuntimeDemo[9617:724245] value1.class = __NSCFNumber
+2016-10-26 13:24:55.188 XZHRuntimeDemo[9617:724245] value2.class = __NSCFNumber
+2016-10-26 13:24:55.189 XZHRuntimeDemo[9617:724245] _value1 = 1, _value2 = 2, _value3 = 3.000000
+2016-10-26 13:24:55.189 XZHRuntimeDemo[9617:724245] value1 = 1, class = __NSCFNumber
+2016-10-26 13:24:55.189 XZHRuntimeDemo[9617:724245] value2 = 2, class = __NSCFNumber
+```
+
+##iOS SDK并没有直接给出block的类型Class，只能通过代码手段测试得到
+
+- (1) block有三种内部类型
+
+```objc
+Class cls1 = objc_getClass("__NSGlobalBlock__");
+Class cls2 = objc_getClass("__NSMallocBlock__");
+Class cls3 = objc_getClass("__NSStackBlock__");
+```
+
+输出如下
+
+```
+(Class) cls1 = __NSGlobalBlock__
+(Class) cls2 = __NSMallocBlock__
+(Class) cls3 = __NSStackBlock__
+```
+
+- (2) 类似NSArray/NSMutableArray是`__NSArrayI、__NSArrayM`的类簇类一样，如上三种block内部类也有`类簇类`就是`NSBlock`
+
+
+```objc
+Class cls = objc_getClass("NSBlock");
+```
+
+输出如下
+
+```
+(Class) cls = NSBlock
+```
+
+那么在我们代码中可以直接将`objc_getClass("NSBlock")`作为类簇类使用，但是为了考虑iOS SDK版本升级后，可能不再是`NSBlock`这个类来代替。那么所以如下这个代码可以在任何iOS SDK版本下找到block的对应的类簇类
+
+```c
+static Class XZHGetNSBlockClass() {
+    static Class NSBlock = Nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        void (^block)(void) = ^(){};
+        Class cls = [(NSObject*)block class];
+        while (cls && (class_getSuperclass(cls) != [NSObject class]) ) {
+            cls = class_getSuperclass(cls);
+        }
+        NSBlock = cls;
+    });
+    return NSBlock;
+}
+```
+
+##Foundation中给出的类基本上都是`类簇`类，不是真正使用的内部类，只是一个操作内部类的入口类
+
+- (1) NSArray/NSMutableArray作为类簇操作的内部类 
+
+```
+__NSArrayI、__NSArray0、__NSArrayM、__PlaceholderArray
+```
+
+- (2) NSSet/NSMutableSet作为类簇操作的内部类 
+
+```
+__NSSetI、__NSSingleObjectSetI、__NSSetM
+```
+
+- (3) NSDictionary/NSMutableDictionary作为类簇操作的内部类 
+
+```
+__NSDictionary0、__NSDictionaryI、__NSDictionaryM
+```
+
+- (4) NSData作为类簇操作的内部类
+
+```
+_NSZeroData、NSConcreteData、NSConcreteMutableData
+```
+
+- (5) NSNumber作为类簇操作的内部类
+
+```
+__NSCFNumber
+```
+
+- (6) NSString/NSMutableString作为类簇操作的内部类
+
+```
+__NSCFConstantString、NSTaggedPointerString、__NSCFString
+```
+
+- (7) NSValue作为类簇操作的内部类
+
+```
+NSConcreteValue
+```
+
+- (8) NSBlock作为类簇操作的内部类（NSBlock没有被开放的）
+
+```
+__NSGlobalBlock__、__NSMallocBlock__、__NSStackBlock__
+```
+
+- 不是类簇的
+
+```
+NSURL
+NSDate
+NSDecimalNumber
+```
+
+判断一个Class属于哪一种类型，直接判断这个Class是否是如上`类簇类的subClass`即可:
+
+```objc
+XZHFoundationType XZHGetClassFoundationType(Class cls) {
+    if (NULL == cls) {return XZHFoundationTypeUnKnown;}
+    if ([cls isSubclassOfClass:[NSArray class]]) {return XZHFoundationTypeNSArray;}
+    else if ([cls isSubclassOfClass:[NSURL class]]) {return XZHFoundationTypeNSURL;}
+    else if ([cls isSubclassOfClass:[NSMutableArray class]]) {return XZHFoundationTypeNSMutableArray;}
+    else if ([cls isSubclassOfClass:[NSSet class]]) {return XZHFoundationTypeNSSet;}
+    else if ([cls isSubclassOfClass:[NSMutableSet class]]) {return XZHFoundationTypeNSMutableSet;}
+    else if ([cls isSubclassOfClass:[NSDictionary class]]) {return XZHFoundationTypeNSMutableArray;}
+    else if ([cls isSubclassOfClass:[NSMutableDictionary class]]) {return XZHFoundationTypeNSMutableDictionary;}
+    else if ([cls isSubclassOfClass:[NSDate class]]) {return XZHFoundationTypeNSDate;}
+    else if ([cls isSubclassOfClass:[NSData class]]) {return XZHFoundationTypeNSData;}
+    else if ([cls isSubclassOfClass:[NSMutableData class]]) {return XZHFoundationTypeNSMutableData;}
+    else if ([cls isSubclassOfClass:[NSNumber class]]) {return XZHFoundationTypeNSNumber;}
+    else if ([cls isSubclassOfClass:[NSDecimalNumber class]]) {return XZHFoundationTypeNSDecimalNumber;}
+    else if ([cls isSubclassOfClass:[NSString class]]) {return XZHFoundationTypeNSString;}
+    else if ([cls isSubclassOfClass:[NSMutableString class]]) {return XZHFoundationTypeNSMutableString;}
+    else if ([cls isSubclassOfClass:[NSValue class]]) {return XZHFoundationTypeNSValue;}
+    else if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
+    else if ([cls isSubclassOfClass:XZHGetNSBlockClass()]) {return XZHFoundationTypeNSBlock;}
+    else {return XZHFoundationTypeUnKnown;}//未知、自定义类型
+}
+```
+
+基本上类簇模式，都是使用`继承`的方式来实现不同的版本实现。
+
+##摘录自YYModel中对日期字符串处理的c函数代码
+
+使用一个static数组保存若干个不同计算类型的Block对象，然后取出某一个进行对应类型的数据计算。
+
+```c
+
+typedef NSDate* (^XZHDateParseBlock)(NSString *dateString);
+
+/**
+ *  日期字符串格式化
+ */
+static force_inline NSDate* XZHDateFromString(__unsafe_unretained NSString *dataString) {
+    
+//1. 日期字符串的最大长度为32
+#define kParserNum 32
+    
+    //2. 保存对应长度长度日期字符串解析的Block数组
+    static XZHDateParseBlock blocks[kParserNum + 1] = {0};//长度+1，保持下标同步
+    
+    //3. 单例化 对应日期字符串长度的 解析成NSDate的Block
+    //NSDate解析Block = blocks[日期字符串长度];
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        
+        {
+            /*
+             Google、长度为10的日期字符串解析
+             
+                2014-01-20 --> yyyy-MM-dd
+             */
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+            
+            //字符串长度为10
+            formatter.dateFormat = @"yyyy-MM-dd";
+            
+            //对应解析NSDate的Block，保存到数组第10个（声明blocks数组时长度+1）
+            blocks[10] = ^NSDate* (NSString *string) {
+                return [formatter dateFromString:string];
+            };
+        }
+        
+        {
+            /*
+             Google、长度为19的日期字符串解析，分两种
+             
+                格式一、2014-01-20 12:24:48 --> yyyy-MM-dd'T'HH:mm:ss
+                格式二、2014-01-20T12:24:48 --> yyyy-MM-dd'T'HH:mm:ss
+             */
+            NSDateFormatter *formatter1 = [[NSDateFormatter alloc] init];
+            formatter1.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter1.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+            
+            formatter1.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss";
+            
+            NSDateFormatter *formatter2 = [[NSDateFormatter alloc] init];
+            formatter2.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter2.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+            
+            formatter2.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+            
+            //将日期字符串解析的Block保存到19的数组位置
+            blocks[19] = ^(NSString *string) {
+                if ([string characterAtIndex:10] == 'T') {
+                    return [formatter1 dateFromString:string];
+                } else {
+                    return [formatter2 dateFromString:string];
+                }
+            };
+        }
+        
+        {
+            /*
+             Github, Apple、2014-01-20T12:24:48Z （长度=20）--> yyyy-MM-dd'T'HH:mm:ssZ
+             Facebook、2014-01-20T12:24:48+0800（长度=24）--> yyyy-MM-dd'T'HH:mm:ssZ
+             Facebook、2014-01-20T12:24:48+12:00（长度=25）--> yyyy-MM-dd'T'HH:mm:ssZ
+             */
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZ";
+            blocks[20] = ^(NSString *string) {
+                return [formatter dateFromString:string];
+            };
+            blocks[24] = ^(NSString *string) {
+                return [formatter dateFromString:string];
+            };
+            blocks[25] = ^(NSString *string) {
+                return [formatter dateFromString:string];
+            };
+        }
+        
+        {
+            /*
+             Weibo, Twitter、Fri Sep 04 00:12:21 +0800 2015（长度=30）--> EEE MMM dd HH:mm:ss Z yyyy
+             */
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            formatter.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.dateFormat = @"EEE MMM dd HH:mm:ss Z yyyy";
+            blocks[30] = ^(NSString *string) {
+                return [formatter dateFromString:string];
+            };
+        }
+    });
+    
+    //4. 传入的日期字符串空
+    if (!dataString) return nil;
+    
+    //5. 取出日期字符串长度对应的 转换日期的Block
+    XZHDateParseBlock parser = blocks[dataString.length];
+    
+    //6.
+    if (!parser) return nil;
+    
+    //7. 执行Block，传入日期字符串
+    return parser(dataString);
+#undef kParserNum
+}
+```
+
+##json dic >>> model 的大体逻辑
+
+- (1) json dic
+
+```objc
+id json = @{
+                @"name" : @"dog001",
+                @"data" : @{
+                            @"uid" : @(100001),
+                            @"uid" : @"100001",
+                            @"uid" : @"nil",
+                            @"uid" : @"Nil",
+                            @"uid" : @"NULL",
+                            @"uid" : @"null",
+                            @"uid" : @"<null>",
+                            @"uid" : [NSNull null],
+                        },
+                @"p_age" : @"21",
+                @"user" : @{
+                        @"city" : @{
+                                @"address" : @"address4.....",
+                                },
+                        },
+                @"sex" : @"男",
+                @"animal" : @{
+                        @"cat" : @{
+                                @"c_id" : @"cat_hahahha",
+                                @"c_name" : @"cat_0000001",
+                                },
+                        },
+                };
+```
+
+- (2) 使用类方法解析json
+
+```objc
+Dog *dog = [Dog xzh_modelFromObject:json];
+```
+
+- (3) 生成`[Dog class]`对应的 ClassMapper
+	- 生成 ClassModel
+		- IvarModel
+		- PropertyModel
+		- MethodModel
+		- CategoryModel
+		- ProtocolModel
+	- 生成PropertyMapper记录所有的PropertyModel与jsonkey的映射关系
+
+- (3) 遍历`[Dog class]`对应的 ClassMapper->_jsonKeyMappedPropertyMapperDic 
+	- 取出jsonkey对应的jsonvalue
+	- 设置到model的属性值
+
+
+##嵌套单个NSObject类的处理逻辑
+
+```objc
+@interface Cat : NSObject
+@property (nonatomic, assign) NSInteger cid;
+@property (nonatomic, copy) NSString *name;
+@end
+
+@interface Dog : NSObject
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) NSInteger uid;
+@property (nonatomic, assign) NSInteger age;
+@property (nonatomic, copy) NSString *address;
+@property (nonatomic, copy) NSString *sex1;
+@property (nonatomic, copy) NSString *sex2;
+@property (nonatomic, copy) NSString *sex3;
+@property (nonatomic, strong) Cat *cat;
+@end
+```
+
+- (1) 首先按照`[Dog class]`解析json
+- (2) 当取到item json对应的类型是`[Cat class]`时
+- (3) 开始解析`[Cat class]`，生成`[Cat class]`对应的ClassMapper实例
+- (4) 然后将item json 按照`[Cat class]`对应的ClassMapper实例，进行设置
+
+所以并不是一开始解析 `[Dog class]` 时，就直接将内部的`[Cat class]`同时解析。
+
+也没有必要，因为有可能`[Cat class]`没有对应的json value。所以用到的时候再去解析并生成对应的ClassMapper实例。
+
+##嵌套NSObject类的处理逻辑
+
+```objc
+@interface Child : NSObject
+@property (nonatomic, assign) NSInteger cid;
+@property (nonatomic, copy) NSString *name;
+@end
+
+@interface Dog : NSObject
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) NSInteger uid;
+@property (nonatomic, assign) NSInteger age;
+@property (nonatomic, copy) NSString *address;
+@property (nonatomic, copy) NSString *sex1;
+@property (nonatomic, copy) NSString *sex2;
+@property (nonatomic, copy) NSString *sex3;
+@property (nonatomic, strong) NSArray *childs;
+@end
+```
+
+- (1) 首先按照`[Dog class]`解析json
+- (2) 当取到item json对应的类型是`[NSArray class]`时
+- (3) 遍历 json array 中的每一个item json value
+- (4) 获取`PropertyMapper->_containerCls`对应的Array内部元素对象的Class
+- (5) 判断每一个item json value的类型
+	- `NSDictionary`
+	- `PropertyMapper->_containerCls`
+
+- (6) 如果是NSDictionary类型，则继续讲json item value 按照 `PropertyMapper->_containerCls` 进行json转model
+
+```objc
+id obj = [PropertyMapper->_containerCls _xzh_modelFromJSONDictionary:jsonItemValue];
+```
+	
+- (7) 如果已经是`PropertyMapper->_containerCls`直接加入数组
+
+- (8) 如果根本就不存在`PropertyMapper->_containerCls`，则直接当做NSArray对象存入model属性值
+
+
+##json解析优化一、使用`__unsafe_unretained`修饰指针变量指向的`Objective-C`对象，提升代码的执行速度
+
+###首先`__unsafe_unretained、__weak、__strong、__assign`只能对指向`Objective-C`对象的指针变量进行修饰
+
+同样的实现代码，发现和YYModel的运行速度慢2倍多，于是找了很久的而原因，原来是`__unsafe_unretained`的效果。
+
+如果对于一个传入的对象，只是需要临时使用，而不是长时间需要持有的话，那么可以显示的使用`__unsafe_unretained`来修饰指针变量。
+
+因为`__unsafe_unretained`是不会去持有指针变量所指向的对象，仅仅只是指针指向对象临时使用，不会修改对象的retainCount，即不会指向`[对象 retain];`的操作。
+
+但是不要使用`__weak`修饰指针变量，因为使用weak修饰的指针变量指向的对象时，runtime system默认会会将这个对象加入到一个autoreleasepool对象中，来保证使用这个对象的期间都不会释放，很明显这会影响执行速度。
+
+
+注意、OC代码中对于一个对象的指针变量，默认都是`__strong`修饰。
+
+下面是默认情况下使用`__strong`修饰对象指针变量 和 `__unsafe_unretained`修饰对象指针变量 同时完成一样的事情的时候消耗的代码运行时间:
+
+```objc
+@interface UnContext : NSObject
+@property (nonatomic, copy) NSString *value1;
+@property (nonatomic, strong) id value2;
+@end
+@implementation UnContext
+@end
+
+
+void test1(UnContext *ctx) {
+    ctx.value1 = @"hahahaha2";
+    ctx.value2 = [NSObject new];
+}
+
+void test2(__unsafe_unretained UnContext *ctx) {
+    ctx.value1 = @"hahahaha2";
+    ctx.value2 = [NSObject new];
+}
+
+@implementation UnSafeUnRetainedViewController
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UnContext *ctx = [UnContext new];
+    ctx.value1 = @"hahaha";
+    ctx.value2 = [NSObject new];
+    
+    double date_s = CFAbsoluteTimeGetCurrent();
+    for (int i = 0; i < 100000; i++) {
+		 test1(ctx);
+        test2(ctx);
+    }
+    double date_current = CFAbsoluteTimeGetCurrent() - date_s;
+    NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
+}
+@end
+```
+
+如上代码，`test1()`消耗的时间范围大概是:
+
+```
+258510.768414 μs
+```
+
+如上代码，`test2()`消耗的时间范围:
+
+```
+199925.065041 μs
+```
+
+随着循环的次数越来越大，`test1()`与`test2()`两个函数执行所消耗的时间的区别也越来越大。
+
+但是需要注意，`__unsafe_unretained`修饰的指针变量不会在被指向对象废弃时而自动赋值为nil，就有可能引发一些崩溃，但是分情况:
+
+- (1) `[nil sel:args]` 这种肯定是没问题的
+- (2) `[array addObject:nil];` 这种就会崩溃
+
+使用`__unsafe_unretained`的时候就需要特别的小心。参考YYModel的代码，发现只对象方法传入的参数使用`__unsafe_unretained`修饰，但是对象的实例变量、属性都不会使用`__unsafe_unretained`修饰。
+
+除非是不需要持有某一个实例变量对象，就使用`__unsafe_unretained`。
+
+总之使用的时候，搞清楚到底需不需要strong持有这个`Objective-c`对象。
+
+##json解析优化二、一个json object 与 该class的所有property mapper 之间的解析规则
+
+我之前的做法就是直接 遍历所有的`ClassMapper->_proeprtyMappers`数组挨个解析json dic，并没有关心如下连个count的大小关系:
+
+- (1) class mappded count
+- (2) json dic key count 
+
+那么虽然这么做也是OK的，但是有个效率问题。很可能json的value item个数是小于Model的属性个数的:
+
+- (1) json 
+
+```objc
+{
+    "login": "facebook",
+    "id": 69631,
+    "avatar_url": "https://avatars.githubusercontent.com/u/69631?v=3",
+    "gravatar_id": "",
+    "url": "https://api.github.com/users/facebook",
+    "html_url": "https://github.com/facebook",
+    "followers_url": "https://api.github.com/users/facebook/followers",
+    "following_url": "https://api.github.com/users/facebook/following{/other_user}",
+    "gists_url": "https://api.github.com/users/facebook/gists{/gist_id}",
+    "starred_url": "https://api.github.com/users/facebook/starred{/owner}{/repo}",
+}
+```
+
+- (2) 实体类
+
+```objc
+@interface XZHRuntimeUserModel : NSObject
+@property (nonatomic, strong) NSString *login;
+@property (nonatomic, assign) UInt64 userID;
+@property (nonatomic, strong) NSString *avatarURL;
+@property (nonatomic, strong) NSString *gravatarID;
+@property (nonatomic, strong) NSString *url;
+@property (nonatomic, strong) NSString *htmlURL;
+@property (nonatomic, strong) NSString *followersURL;
+@property (nonatomic, strong) NSString *followingURL;
+@property (nonatomic, strong) NSString *gistsURL;
+@property (nonatomic, strong) NSString *starredURL;
+@property (nonatomic, strong) NSString *subscriptionsURL;
+@property (nonatomic, strong) NSString *organizationsURL;
+@property (nonatomic, strong) NSString *reposURL;
+@property (nonatomic, strong) NSString *eventsURL;
+@property (nonatomic, strong) NSString *receivedEventsURL;
+@property (nonatomic, strong) NSString *type;
+@property (nonatomic, assign) BOOL siteAdmin;
+@property (nonatomic, strong) NSString *name;
+@property (nonatomic, strong) NSString *company;
+@property (nonatomic, strong) NSString *blog;
+@property (nonatomic, strong) NSString *location;
+@property (nonatomic, strong) NSString *email;
+@property (nonatomic, strong) NSString *hireable;
+@property (nonatomic, strong) NSString *bio;
+@property (nonatomic, assign) UInt32 publicRepos;
+@property (nonatomic, assign) UInt32 publicGists;
+@property (nonatomic, assign) UInt32 followers;
+@property (nonatomic, assign) UInt32 following;
+@property (nonatomic, strong) NSDate *createdAt;
+@property (nonatomic, strong) NSDate *updatedAt;
+@property (nonatomic, strong) NSValue *test;
+@end
+```
+
+可以看到实体类属性的个数远远大于json的item value的个数。那如果这种情况下，也是直接遍历`实体类的所有属性`都对json进行一次解析。那么其实就有很多次循环操作都是浪费的。因为json中映射某一个属性值的item项根本就没有，就这样也白白的浪费了一次循环执行。
+
+###所以需要区别对待 class mappded count 与 json dic key count 的大小情况
+
+- (1) class mappded count >= json dic key count 
+
+此种情况下，应该主要依靠json dic本身的所有的Key进行解析。
+
+但是有可能有一些key是`keyPath`或`keyArray`类型的。那么就可能无法在第一轮进行正常解析。
+
+那么还需要辅助执行按照`keyPath`或`keyArray`类型进行解析一次。
+
+这样一来，远远比统统按照实体类属性个数进行循环遍历的次数少的多。
+
+
+- (2) class mappded count < json dic key count 
+
+此种情况下，可以直接遍历体类所有的属性进行解析。
+
+
+- (3) 参考自YYModel的做法，分成如上两种情况
+
+```objc
+if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
+	
+	//1. 第一步、首先按照json dic 中的所有的单个key进行json解析
+    CFDictionaryApplyFunction((CFDictionaryRef)dic, ModelSetWithDictionaryFunction, &context);
+    
+    //2. 第二步、再特别针对映射keyPath的属性解析
+    if (modelMeta->_keyPathPropertyMetas) {
+        CFArrayApplyFunction((CFArrayRef)modelMeta->_keyPathPropertyMetas,
+                             CFRangeMake(0, CFArrayGetCount((CFArrayRef)modelMeta->_keyPathPropertyMetas)),
+                             ModelSetWithPropertyMetaArrayFunction,
+                             &context);
+    }
+    
+    //3. 第三步、再特别针对映射keyArray的属性解析
+    if (modelMeta->_multiKeysPropertyMetas) {
+        CFArrayApplyFunction((CFArrayRef)modelMeta->_multiKeysPropertyMetas,
+                             CFRangeMake(0, CFArrayGetCount((CFArrayRef)modelMeta->_multiKeysPropertyMetas)),
+                             ModelSetWithPropertyMetaArrayFunction,
+                             &context);
+    }
+} else {
+	// 4. 直接所有的属性映射进行解析
+    CFArrayApplyFunction((CFArrayRef)modelMeta->_allPropertyMetas,
+                         CFRangeMake(0, modelMeta->_keyMappedCount),
+                         ModelSetWithPropertyMetaArrayFunction,
+                         &context);
+}
+```
+
+这样一来比所有情况，都按照实体类所有的属性都进行一次循环遍历解析所消耗的时间小多了。
+
+
+##json解析优化三、追求极致使用CoreFoundation来代替Foundation
+
+就没啥写了，就是一些CoreFoundation的c函数api使用。
+
+##json解析优化四、XZHSetFoundationObjectToProperty()这个负责完成将一个Foundation对象设置到NSObject实体类对象的属性变量的c函数代码优化
+
+发现这个函数运行的时间非常的长，是YYModel中类似函数运行消耗时间的2-3倍，卧槽了妈个比，先把自己的代码贴出来
+
+```c
+static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __unsafe_unretained id object, __unsafe_unretained XZHPropertyMapper *mapper)
+{
+    if (!value || !object || !mapper) {return;}
+    if (!mapper->_isSetterAccess) {return;}
+    SEL setter = mapper->_property.setter;
+    
+    if (XZHFoundationTypeNone != mapper->_foundationType){
+        switch (mapper->_foundationType) {//start switch mapper->_foundationType
+            case XZHFoundationTypeNSString:
+            case XZHFoundationTypeNSMutableString: {
+                // jsonValue.class ==> 1)NSString 2)NSMutableString 3)NSDate 4)NSNumber 5)NSData 6)NSURL
+                if ([value isKindOfClass:[NSString class]]) {
+                    value = XZHConvertNullNSString(value);
+                    if (!value)return;
+                    if (mapper->_foundationType == XZHFoundationTypeNSString) {
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, value);
+                    } else {
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, [value mutableCopy]);
+                    }
+                } else if ([value isKindOfClass:[NSDate class]]) {
+                    if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
+                        NSString *dateFormat = [mapper->_generacCls xzh_dateFormat];
+                        if (dateFormat) {
+                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                            NSString *dateStr = [fomatter stringFromDate:value];
+                            if (dateStr) {
+                                if (mapper->_foundationType == XZHFoundationTypeNSString) {
+                                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, dateStr);
+                                } else {
+                                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, dateStr.mutableCopy);
+                                }
+                            }
+                        }
+                    }
+                } else if ([value isKindOfClass:[NSNumber class]]) {
+                    NSString *valueString = [(NSNumber*)value stringValue];
+                    if (valueString) {
+                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
+                        } else {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
+                        }
+                    }
+                } else if ([value isKindOfClass:[NSURL class]]) {
+                    NSString *valueString = [(NSURL*)value absoluteString];
+                    if (valueString) {
+                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
+                        } else {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
+                        }
+                    }
+                } else if ([value isKindOfClass:[NSData class]]) {
+                    NSString *valueString = [[NSString alloc] initWithData:value encoding:NSUTF8StringEncoding];
+                    if (valueString) {
+                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
+                        } else {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
+                        }
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSNumber:
+            case XZHFoundationTypeNSDecimalNumber: {
+                // jsonValue.class ==> 1)NSNumber 2)NSString（数值字符串/日期字符串） 3)NSDate
+                if ([value isKindOfClass:[NSNumber class]]) {
+                    ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(object, setter, value);
+                } else if ([value isKindOfClass:[NSString class]]) {
+                    value = XZHConvertNullNSString(value);
+                    if (!value)return;
+                    NSDate *date  = nil;
+                    if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
+                        NSString *dateFormat = [mapper->_generacCls xzh_dateFormat];
+                        if (dateFormat) {
+                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                            date = [fomatter dateFromString:value];
+                        }
+                    }
+                    NSNumber *number = nil;
+                    if (date) {
+                        number = [NSNumber numberWithDouble:[date timeIntervalSinceReferenceDate]];
+                    } else {
+                        number = XZHNumberWithValue(value);
+                    }
+                    if (number) {
+                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(object, setter, number);
+                    }
+                } else if ([value isKindOfClass:[NSDate class]]) {
+                    NSNumber *number = [NSNumber numberWithDouble:[(NSDate*)value timeIntervalSinceReferenceDate]];
+                    if (number) {
+                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(object, setter, number);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSURL: {
+                // jsonValue.class ==> 1)NSURL 2)NSString
+                if ([value isKindOfClass:[NSURL class]]) {
+                    ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, value);
+                } else if ([value isKindOfClass:[NSString class]]) {
+                    value = XZHConvertNullNSString(value);
+                    if (value) {
+                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, [[NSURL alloc] initWithString:value]);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSArray :
+            case XZHFoundationTypeNSMutableArray: {
+                // jsonValue.class ==> 1) NSArray 2)NSMutableArray 3) NSSet
+                NSArray *valueArray = nil;
+                if ([value isKindOfClass:[NSArray class]]) {valueArray = value;}
+                else if ([value isKindOfClass:[NSSet class]]) {valueArray = [value allObjects];}
+                if (!valueArray) {return;}
+                
+                if (mapper->_containerCls) {
+                    /**
+                     *  解析array中每一个元素为实体对象，然后将解析的对象设置到model
+                     */
+                    NSMutableArray *desArray = [[NSMutableArray alloc] initWithCapacity:valueArray.count];
+                    for (id item in valueArray) {
+                        if ([item isKindOfClass:mapper->_containerCls]) {
+                            //item value 已经是指定类型的对象
+                            [desArray addObject:item];
+                        } else if ([item isKindOfClass:[NSDictionary class]]) {
+                            /**
+                             *  item value 是 NSDictionary类型的对象，继续解析按照Class进行解析:
+                             *  - (1)_containerCls指定的Class 
+                             *  - (2)实现`+[NSObject xzh_classForDictionary:]`方法返回的Class
+                             */
+                            Class cls = mapper->_containerCls;
+                            if ([mapper->_generacCls respondsToSelector:@selector(xzh_classForDictionary:)]) {
+                                cls = [(id<XZHJSONMappingConfig>)mapper->_generacCls xzh_classForDictionary:item];
+                            }
+                            
+                            id newItem = [cls xzh_modelFromJSONDictionary:item];
+                            if (newItem)  {[desArray addObject:newItem];}
+                        }
+                    }
+                    
+                    if (mapper->_foundationType == XZHFoundationTypeNSArray) {
+                        ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(object, setter, desArray.copy);
+                    } else {
+                        ((void (*)(id, SEL, NSMutableArray*))(void *) objc_msgSend)(object, setter, desArray);
+                    }
+                } else {
+                    if (mapper->_foundationType == XZHFoundationTypeNSArray) {
+                        ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(object, setter, valueArray);
+                    } else {
+                        ((void (*)(id, SEL, NSMutableArray*))(void *) objc_msgSend)(object, setter, valueArray.mutableCopy);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSDictionary:
+            case XZHFoundationTypeNSMutableDictionary: {
+                // jsonValue.class ==> 1)NSDictionary 2)NSMutableDictionary
+                NSDictionary *valueDic = nil;
+                if ([value isKindOfClass:[NSDictionary class]]) {valueDic = value;}
+                else if ([value isKindOfClass:[NSString class]]) {valueDic = XZHJSONStringToDic(value);}// 支持JSON字符串
+                if (!valueDic){return;}
+                
+                if (mapper->_containerCls) {
+                    NSMutableDictionary *desDic = [[NSMutableDictionary alloc] initWithCapacity:valueDic.count];
+                    [valueDic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+                        if ([obj isKindOfClass:mapper->_containerCls]) {
+                            [desDic setObject:obj forKey:key];
+                        } else if ([obj isKindOfClass:[NSDictionary class]]){
+                            Class cls = mapper->_containerCls;
+                            if ([mapper->_generacCls respondsToSelector:@selector(xzh_classForDictionary:)]) {
+                                cls = [(id<XZHJSONMappingConfig>)mapper->_generacCls xzh_classForDictionary:obj];
+                            }
+                            id newItem = [mapper->_containerCls xzh_modelFromJSONDictionary:obj];
+                            if (newItem) {[desDic setObject:newItem forKey:key];}
+                        }
+                    }];
+                    if (mapper->_foundationType == XZHFoundationTypeNSDictionary) {
+                        ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(object, setter, desDic.copy);
+                    } else {
+                        ((void (*)(id, SEL, NSMutableDictionary*))(void *) objc_msgSend)(object, setter, desDic);
+                    }
+                } else {
+                    if (mapper->_foundationType == XZHFoundationTypeNSDictionary) {
+                        ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(object, setter, valueDic);
+                    } else {
+                        ((void (*)(id, SEL, NSMutableDictionary*))(void *) objc_msgSend)(object, setter, valueDic.mutableCopy);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSSet:
+            case XZHFoundationTypeNSMutableSet: {
+                // jsonValue.class ==> 1) NSSet 2)NSMutableSet 3) NSArray
+                NSSet *valueSet = nil;
+                if ([value isKindOfClass:[NSSet class]]) {valueSet = value;}
+                else if ([value isKindOfClass:[NSArray class]]) {valueSet = [NSSet setWithArray:value];}
+                if (!valueSet) return;
+                
+                if (mapper->_containerCls) {
+                    NSMutableSet *desSet = [[NSMutableSet alloc] initWithCapacity:valueSet.count];
+                    for (id item in valueSet) {
+                        if ([item isKindOfClass:mapper->_containerCls]) {
+                            [desSet addObject:item];
+                        } else if ([item isKindOfClass:[NSDictionary class]]) {
+                            Class cls = mapper->_containerCls;
+                            if ([mapper->_generacCls respondsToSelector:@selector(xzh_classForDictionary:)]) {
+                                cls = [(id<XZHJSONMappingConfig>)mapper->_generacCls xzh_classForDictionary:item];
+                            }
+                            
+                            id newItem = [mapper->_containerCls xzh_modelFromJSONDictionary:item];
+                            if (newItem) {[desSet addObject:newItem];}
+                        }
+                        if (mapper->_foundationType == XZHFoundationTypeNSSet) {
+                            ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(object, setter, desSet.copy);
+                        } else {
+                            ((void (*)(id, SEL, NSMutableSet*))(void *) objc_msgSend)(object, setter, desSet);
+                        }
+                    }
+                } else {
+                    if (mapper->_foundationType == XZHFoundationTypeNSSet) {
+                        ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(object, setter, valueSet);
+                    } else {
+                        ((void (*)(id, SEL, NSMutableSet*))(void *) objc_msgSend)(object, setter, valueSet.mutableCopy);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeCustomer: {
+                // jsonValue.class ==> 1)自定义NSObject类型 2)NSDictionary 3)NSString
+                if ([value isKindOfClass:mapper->_ivarClass]) {
+                    ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, value);
+                } else if ([value isKindOfClass:[NSDictionary class]] || [value isKindOfClass:[NSString class]]) {
+                    if ([value isKindOfClass:[NSString class]]) {
+                        value = XZHConvertNullNSString(value);
+                        value = XZHJSONStringToDic(value);
+                    }
+                    if (!value)return;
+                    
+                    Class cls = mapper->_ivarClass;
+                    if([mapper->_generacCls respondsToSelector:@selector(xzh_classForDictionary:)]) {
+                        cls = [mapper->_generacCls xzh_classForDictionary:value];
+                    }
+                    id newItem = [cls xzh_modelFromJSONDictionary:value];
+                    if (newItem) {
+                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, newItem);
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSDate: {
+                // jsonValue.class ==> 1)NSString（日期字符串） 2)NSDate 3) NSNumber
+                if ([value isKindOfClass:[NSDate class]]) {
+                    ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(object, setter, value);
+                } else if ([value isKindOfClass:[NSNumber class]]) {
+                    NSDate *date = [NSDate dateWithTimeIntervalSinceReferenceDate:[(NSNumber*)value doubleValue]];
+                    if (date) {
+                        ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(object, setter, date);
+                    }
+                } else if ([value isKindOfClass:[NSString class]]) {
+                    value = XZHConvertNullNSString(value);
+                    if (!value)return;
+                    
+                    if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
+                        NSString *dateFormat = [mapper->_generacCls xzh_dateFormat];
+                        if (dateFormat) {
+                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                            NSDate *date = [fomatter dateFromString:value];
+                            if (date) {
+                                ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(object, setter, date);
+                            }
+                        }
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSData:
+            case XZHFoundationTypeNSMutableData: {
+                // 1)NSData 2)NSString
+                if ([value isKindOfClass:[NSData class]]) {
+                    if (mapper->_foundationType == XZHFoundationTypeNSData) {
+                        ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(object, setter, value);
+                    } else {
+                        NSData *data = (NSData*)value;
+                        ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(object, setter, data.mutableCopy);
+                    }
+                    
+                } else if ([value isKindOfClass:[NSString class]]) {
+                    value = XZHConvertNullNSString(value);
+                    if (!value)return;
+                    
+                    NSData *data = [(NSString*)value dataUsingEncoding:NSUTF8StringEncoding];
+                    if (data) {
+                        if (mapper->_foundationType == XZHFoundationTypeNSData) {
+                            ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(object, setter, data);
+                        } else {
+                            ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(object, setter, data.mutableCopy);
+                        }
+                    }
+                }
+            }
+                break;
+            case XZHFoundationTypeNSValue: {
+                if ([value isKindOfClass:[NSValue class]]) {
+                    ((void (*)(id, SEL, NSValue*))(void *) objc_msgSend)(object, setter, value);
+                }
+            }
+                break;
+            case XZHFoundationTypeNSBlock: {
+                if ([value isKindOfClass:XZHGetNSBlockClass()]) {
+                    /**
+                     *  NSBlock的任意类: void(^)()，任意参数类型的block都可以设置进去，但是取出来执行的时候需要看参数类型
+                     *  否则会程序崩溃
+                     */
+                    ((void (*)(id, SEL, void(^)()))(void *) objc_msgSend)(object, setter, value);
+                }
+            }
+                break;
+            case XZHFoundationTypeNSNull: {
+                if ([value isKindOfClass:[NSNull class]]) {
+                    ((void (*)(id, SEL, NSNull*))(void *) objc_msgSend)(object, setter, (id)kCFNull);
+                }
+            }
+                break;
+            default:
+                break;
+            
+        }//end switch mapper->_foundationType
+        
+    } else if (mapper->_isCNumber) {
+        NSNumber *number = XZHNumberWithValue(value);
+        if (!number) return;
+        switch (mapper->_typeEncoding & XZHTypeEncodingDataTypeMask) {
+            case XZHTypeEncodingChar: {
+                char num = [number charValue];
+                ((void (*)(id, SEL, char))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingUnsignedChar: {
+                unsigned char num = [number unsignedCharValue];
+                ((void (*)(id, SEL, unsigned char))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingBOOL: {
+                BOOL num = [number boolValue];
+                ((void (*)(id, SEL, BOOL))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingShort: {
+                short num = [number shortValue];
+                ((void (*)(id, SEL, short))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingUnsignedShort: {
+                unsigned short num = [number shortValue];
+                ((void (*)(id, SEL, unsigned short))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingInt: {
+                int num = [number intValue];
+                ((void (*)(id, SEL, int))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingUnsignedInt: {
+                unsigned int num = [number unsignedIntValue];
+                ((void (*)(id, SEL, unsigned int))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingFloat: {
+                float num = [number floatValue];
+                ((void (*)(id, SEL, float))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingLong32: {
+                long num = [number longValue];
+                ((void (*)(id, SEL, long))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingLongLong: {
+                long long num = [number longLongValue];
+                ((void (*)(id, SEL, long long))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingLongDouble: {
+                long double num = [number doubleValue];
+                ((void (*)(id, SEL, long double))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingUnsignedLong: {
+                unsigned long num = [number unsignedLongValue];
+                ((void (*)(id, SEL, unsigned long))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingUnsignedLongLong: {
+                unsigned long long num = [number unsignedLongLongValue];
+                ((void (*)(id, SEL, unsigned long long))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            case XZHTypeEncodingDouble: {
+                double num = [number doubleValue];
+                ((void (*)(id, SEL, double))(void *) objc_msgSend)(object, setter, num);
+            }
+                break;
+            default:
+                break;
+        }
+    } else {
+        /**
+         *  C指针类型的变量，统一使用NSValue进行包装
+         *  且使用NSValue包装c指针变量，会默认都转换成 `void*` 类型，其type encoding >>>> `^v`
+         *
+         *  - (1) c指针变量、CoreFoundation部分结构体实例
+         *      - NSValue >>>> c指针变量
+         *      - c指针变量 >>>> void*
+         *      - c指针变量 >>>> Class/SEL
+         *  
+         *  - (2) c数组、自定义c结构体实例、c共用体实例
+         *      - 只能当做NSValue存取
+         *      - 目前没有看到过 @property 声明c数组的形式
+         *      - @property 声明 c结构体实例指针 ，自定义的c结构体实例 可能是不能支持 KVC、Achiver
+         */
+        switch (mapper->_typeEncoding & XZHTypeEncodingDataTypeMask) {
+            case XZHTypeEncodingCString:
+            case XZHTypeEncodingCPointer: {
+                if (value == (id)kCFNull) {
+                    ((void (*)(id, SEL, void*))(void *) objc_msgSend)(object, setter, (void*)NULL);
+                } else if ([value isKindOfClass:[NSValue class]]) {
+                    NSValue *nsvalue = (NSValue *)value;
+                    if (nsvalue.objCType && 0 == strcmp(nsvalue.objCType, "^v")) {
+                        ((void (*)(id, SEL, void*))(void *) objc_msgSend)(object, setter, nsvalue.pointerValue);
+                    }
+                }
+            }
+                break;
+            case XZHTypeEncodingObjcClass: {
+                if (value == (id)kCFNull) {
+                    ((void (*)(id, SEL, Class))(void *) objc_msgSend)(object, setter, (Class)NULL);
+                } else {
+                    if ([value isKindOfClass:[NSString class]]) {
+                        Class cls = NSClassFromString(value);
+                        if (Nil != cls) {
+                            ((void (*)(id, SEL, Class))(void *) objc_msgSend)(object, setter, cls);
+                        }
+                    } else if ([value isKindOfClass:[NSValue class]]) {
+                        NSValue *nsvalue = (NSValue *)value;
+                        if (nsvalue.objCType && 0 == strcmp(nsvalue.objCType, "^v")) {
+                            char *clsName = (char *)nsvalue.pointerValue;
+                            if (NULL != clsName) {
+                                Class cls = objc_getClass(clsName);//一、objc_getClass()
+                                if (cls) {
+                                    ((void (*)(id, SEL, Class))(void *) objc_msgSend)(object, setter, cls);
+                                }
+                            }
+                        }
+                    } else {
+                        Class cls = object_getClass(value);//二、object_getClass()读取obj->_isa
+                        if (cls) {
+                            ((void (*)(id, SEL, Class))(void *) objc_msgSend)(object, setter, cls);
+                        }
+                    }
+                }
+            }
+                break;
+            case XZHTypeEncodingSEL: {
+                if (value == (id)kCFNull) {
+                    ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(object, setter, (SEL)NULL);
+                } else if ([value isKindOfClass:[NSString class]]){
+                    SEL sel = NSSelectorFromString(value);
+                    if (sel) {
+                        ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(object, setter, sel);
+                    }
+                } else if ([value isKindOfClass:[NSValue class]]) {
+                    NSValue *nsvalue = (NSValue *)value;
+                    if (nsvalue.objCType && strcmp(nsvalue.objCType, "^v")) {
+                        char *selC = (char *)nsvalue.pointerValue;
+                        if (selC) {
+                            NSString *selF = [NSString stringWithUTF8String:selC];
+                            SEL sel = NSSelectorFromString(selF);
+                            if (sel) {
+                                ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(object, setter, sel);
+                            }
+                        }
+                    }
+                }
+            }
+                break;
+            case XZHTypeEncodingCArray:
+            case XZHTypeEncodingCStruct:
+            case XZHTypeEncodingCUnion: {
+                if (value == (id)kCFNull) {
+                    ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(object, setter, (SEL)NULL);
+                } else if ([value isKindOfClass:[NSValue class]]) {
+                    NSValue *nsvalue = (NSValue *)value;
+                    const char *nsvalueCoding = nsvalue.objCType;
+                    const char *propertyModelCoding = mapper->_typeEncodingString.UTF8String;
+                    if (nsvalueCoding && propertyModelCoding && 0 == strcmp(nsvalueCoding, propertyModelCoding)) {
+                        ((void (*)(id, SEL, NSValue*))(void *) objc_msgSend)(object, setter, nsvalue);
+                    }
+                }
+            }
+                break;
+        }
+    }
+}
+```
+
+优化后的代码:
+
+```c
+
+```
