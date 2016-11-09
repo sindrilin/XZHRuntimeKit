@@ -788,7 +788,11 @@ static void ModelSetValueForProperty(__unsafe_unretained id model,
         NSNumber *num = YYNSNumberCreateFromID(value);
         ModelSetNumberToProperty(model, num, meta);
         if (num) [num class]; // hold the number
-    } else if (meta->_nsType) {
+    } else
+    
+        if (meta->_nsType) {
+            
+        
         if (value == (id)kCFNull) {
             ((void (*)(id, SEL, id))(void *) objc_msgSend)((id)model, meta->_setter, (id)nil);
         } else {

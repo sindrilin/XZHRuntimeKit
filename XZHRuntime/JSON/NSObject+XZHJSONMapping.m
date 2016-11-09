@@ -675,29 +675,59 @@ static xzh_force_inline NSDictionary* XZHJSONStringToDic(__unsafe_unretained NSS
     }
 }
 
-static xzh_force_inline NSString* XZHConvertNullNSString(__unsafe_unretained id value) {
-    if (!value || ![value isKindOfClass:[NSString class]]) return value;
-    static NSDictionary *defaultDic = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        defaultDic = @{
-                       @"NIL"   :   @"",
-                       @"Nil"   :   @"",
-                       @"nil"   :   @"",
-                       @"NULL"  :   @"",
-                       @"Null"  :   @"",
-                       @"null"  :   @"",
-                       @"(NULL)" :  @"",
-                       @"(Null)" :  @"",
-                       @"(null)" :  @"",
-                       @"<NULL>" :  @"",
-                       @"<Null>" :  @"",
-                       @"<null>" :  @"",
-                       };
-    });
-    if (nil != [defaultDic objectForKey:value]) {//如果是以上情况的string，返回nil
-        return nil;
-    }
+static xzh_force_inline NSString* XZHConvertNullNSString(__unsafe_unretained NSString *value) {
+//    if (!value || ![value isKindOfClass:[NSString class]]) return value;
+//    static NSDictionary *defaultDic = nil;
+//    static CFDictionaryRef defaultDic = NULL;
+//    static dispatch_once_t onceToken;
+//    dispatch_once(&onceToken, ^{
+//        defaultDic = @{
+//                       @"NIL"   :   @([@"NIL" hash]),
+//                       @"Nil"   :   @([@"Nil" hash]),
+//                       @"nil"   :   @([@"nil" hash]),
+//                       @"NULL"  :   @([@"NULL" hash]),
+//                       @"Null"  :   @([@"Null" hash]),
+//                       @"null"  :   @([@"null" hash]),
+//                       @"(NULL)" :  @([@"(NULL)" hash]),
+//                       @"(Null)" :  @([@"(Null)" hash]),
+//                       @"(null)" :  @([@"(null)" hash]),
+//                       @"<NULL>" :  @([@"<NULL>" hash]),
+//                       @"<Null>" :  @([@"<Null>" hash]),
+//                       @"<null>" :  @([@"<null>" hash]),
+//                       };
+//        defaultDic =
+//    });
+//    if (nil != [defaultDic objectForKey:value]) {
+//        return nil;
+//    }
+    
+//    static NSUInteger NIL_hash = 0;
+//    NIL_hash = [@"NIL" hash];
+//    static NSUInteger Nil_hash = [@"Nil" hash];
+//    static NSUInteger nil_hash = [@"nil" hash];
+//    static NSUInteger NULL_hash = [@"NULL" hash];
+//    static NSUInteger Null_hash = [@"Null" hash];
+//    static NSUInteger null_hash = [@"null" hash];
+//    static NSUInteger _NULL_hash = [@"(NULL)" hash];
+//    static NSUInteger _Null_hash = [@"(Null)" hash];
+//    static NSUInteger _null_hash = [@"(null)" hash];
+//    static NSUInteger __NULL_hash = [@"<NULL>" hash];
+//    static NSUInteger __Null_hash = [@"<Null>" hash];
+//    static NSUInteger __null_hash = [@"<null>" hash];
+    
+//    NSUInteger NIL_hash1 = [@"NIL" hash];
+//    NSUInteger Nil_hash = [@"Nil" hash];
+//    NSUInteger nil_hash = [@"nil" hash];
+//    NSUInteger NULL_hash = [@"NULL" hash];
+//    NSUInteger Null_hash = [@"Null" hash];
+//    NSUInteger null_hash = [@"null" hash];
+//    NSUInteger _NULL_hash = [@"(NULL)" hash];
+//    NSUInteger _Null_hash = [@"(Null)" hash];
+//    NSUInteger _null_hash = [@"(null)" hash];
+//    NSUInteger __NULL_hash = [@"<NULL>" hash];
+//    NSUInteger __Null_hash = [@"<Null>" hash];
+//    NSUInteger __null_hash = [@"<null>" hash];
+    
     return value;
 }
 
@@ -1022,15 +1052,10 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
         switch (mapper->_foundationType) {//start switch mapper->_foundationType
             case XZHFoundationTypeNSString:
             case XZHFoundationTypeNSMutableString: {
-                // jsonValue.class ==> 1)NSString 2)NSMutableString 3)NSDate 4)NSNumber 5)NSData 6)NSURL
+                if ((id)kCFNull == value) {return;}//过滤掉null
                 if ([value isKindOfClass:[NSString class]]) {
-                    value = XZHConvertNullNSString(value);
-                    if (!value)return;
-                    if (mapper->_foundationType == XZHFoundationTypeNSString) {
-                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, value);
-                    } else {
-                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, [value mutableCopy]);
-                    }
+//                    value = XZHConvertNullNSString((NSString*)value);
+                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, (mapper->_foundationType == XZHFoundationTypeNSString) ? value : [value mutableCopy]);
                 } else if ([value isKindOfClass:[NSDate class]]) {
                     if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
                         NSString *dateFormat = [mapper->_generacCls xzh_dateFormat];
@@ -1038,40 +1063,24 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                             NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
                             NSString *dateStr = [fomatter stringFromDate:value];
                             if (dateStr) {
-                                if (mapper->_foundationType == XZHFoundationTypeNSString) {
-                                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, dateStr);
-                                } else {
-                                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, dateStr.mutableCopy);
-                                }
+                                ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, (mapper->_foundationType == XZHFoundationTypeNSString) ? dateStr : [dateStr mutableCopy]);
                             }
                         }
                     }
                 } else if ([value isKindOfClass:[NSNumber class]]) {
                     NSString *valueString = [(NSNumber*)value stringValue];
                     if (valueString) {
-                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
-                        } else {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
-                        }
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, (mapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
                     }
                 } else if ([value isKindOfClass:[NSURL class]]) {
                     NSString *valueString = [(NSURL*)value absoluteString];
                     if (valueString) {
-                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
-                        } else {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
-                        }
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, (mapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
                     }
                 } else if ([value isKindOfClass:[NSData class]]) {
                     NSString *valueString = [[NSString alloc] initWithData:value encoding:NSUTF8StringEncoding];
                     if (valueString) {
-                        if (mapper->_foundationType == XZHFoundationTypeNSString) {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString);
-                        } else {
-                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, valueString.mutableCopy);
-                        }
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(object, setter, (mapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
                     }
                 }
             }
@@ -1082,7 +1091,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                 if ([value isKindOfClass:[NSNumber class]]) {
                     ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(object, setter, value);
                 } else if ([value isKindOfClass:[NSString class]]) {
-                    value = XZHConvertNullNSString(value);
+//                    value = XZHConvertNullNSString(value);
                     if (!value)return;
                     NSDate *date  = nil;
                     if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
@@ -1114,7 +1123,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                 if ([value isKindOfClass:[NSURL class]]) {
                     ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, value);
                 } else if ([value isKindOfClass:[NSString class]]) {
-                    value = XZHConvertNullNSString(value);
+//                    value = XZHConvertNullNSString(value);
                     if (value) {
                         ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, [[NSURL alloc] initWithString:value]);
                     }
@@ -1247,7 +1256,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                     ((void (*)(id, SEL, id))(void *) objc_msgSend)(object, setter, value);
                 } else if ([value isKindOfClass:[NSDictionary class]] || [value isKindOfClass:[NSString class]]) {
                     if ([value isKindOfClass:[NSString class]]) {
-                        value = XZHConvertNullNSString(value);
+//                        value = XZHConvertNullNSString(value);
                         value = XZHJSONStringToDic(value);
                     }
                     if (!value)return;
@@ -1273,7 +1282,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                         ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(object, setter, date);
                     }
                 } else if ([value isKindOfClass:[NSString class]]) {
-                    value = XZHConvertNullNSString(value);
+//                    value = XZHConvertNullNSString(value);
                     if (!value)return;
                     
                     if ([mapper->_generacCls respondsToSelector:@selector(xzh_dateFormat)]) {
@@ -1301,7 +1310,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                     }
                     
                 } else if ([value isKindOfClass:[NSString class]]) {
-                    value = XZHConvertNullNSString(value);
+//                    value = XZHConvertNullNSString(value);
                     if (!value)return;
                     
                     NSData *data = [(NSString*)value dataUsingEncoding:NSUTF8StringEncoding];
@@ -1336,8 +1345,6 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id value, __uns
                     ((void (*)(id, SEL, NSNull*))(void *) objc_msgSend)(object, setter, (id)kCFNull);
                 }
             }
-                break;
-            default:
                 break;
             
         }//end switch mapper->_foundationType
@@ -1556,15 +1563,17 @@ static void XZHJsonToModelApplierFunctionWithJSONDict(const void *key, const voi
      *  所以不必担心jsonDic、classMapper、propertyMapper、model 这些对象会被废弃的问题
      */
     XZHModelContext *ctx = (XZHModelContext *)context;
-    __unsafe_unretained id model = (__bridge __unsafe_unretained id)(ctx->model);
-    if (!model) {return;}
+    __unsafe_unretained id model = (__bridge id)(ctx->model);
+//    if (!model) {return;}
     
     __unsafe_unretained XZHClassMapper *clsMapper = (__bridge XZHClassMapper*)(ctx->classMapper);
-    if (!clsMapper || clsMapper->_totalMappedCount < 1) {return;}
+//    if (!clsMapper || clsMapper->_totalMappedCount < 1) {return;}
     
     __unsafe_unretained XZHPropertyMapper *propertyMapper = CFDictionaryGetValue(clsMapper->_jsonKeyMappedPropertyMapperDic, key);
     while (propertyMapper) {
-//        XZHSetFoundationObjectToProperty((__bridge id)value, model, propertyMapper);
+        if (propertyMapper->_isSetterAccess) {
+            XZHSetFoundationObjectToProperty((__bridge __unsafe_unretained id)value, model, propertyMapper);
+        }
         propertyMapper = propertyMapper->_next;
     }
 }
@@ -1588,7 +1597,7 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
         if (jsonValue && ((id)kCFNull) != jsonValue) {
             __unsafe_unretained id model = (__bridge __unsafe_unretained id)(ctx->model);
             if (!model || (id)kCFNull == model) {return;}
-//            XZHSetFoundationObjectToProperty(jsonValue, model, propertyMapper);
+            XZHSetFoundationObjectToProperty(jsonValue, model, propertyMapper);
         }
         propertyMapper = propertyMapper->_next;
     }

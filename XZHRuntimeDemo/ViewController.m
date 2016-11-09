@@ -917,6 +917,23 @@ struct Node {
     NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
 }
 
+- (void)testHash {
+    NSUInteger NIL_hash1 = [@"NIL" hash];
+    NSUInteger Nil_hash = [@"Nil" hash];
+    NSUInteger nil_hash = [@"nil" hash];
+    NSUInteger NULL_hash = [@"NULL" hash];
+    NSUInteger Null_hash = [@"Null" hash];
+    NSUInteger null_hash = [@"null" hash];
+    NSUInteger _NULL_hash = [@"(NULL)" hash];
+    NSUInteger _Null_hash = [@"(Null)" hash];
+    NSUInteger _null_hash = [@"(null)" hash];
+    NSUInteger __NULL_hash = [@"<NULL>" hash];
+    NSUInteger __Null_hash = [@"<Null>" hash];
+    NSUInteger __null_hash = [@"<null>" hash];
+    
+}
+
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
 //    [self testProtocol];
 //    [self testTypesEncodings];
@@ -934,7 +951,7 @@ struct Node {
 //    [self testJSONMapping5];
 //    [self testJSONMapping6];
     [self testJSONMapping7];
-    
+//    [self testHash];
 }
 
 
