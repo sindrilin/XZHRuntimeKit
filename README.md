@@ -1421,27 +1421,28 @@ void test2(__unsafe_unretained UnContext *ctx) {
 @end
 ```
 
-可以看到实体类属性的个数远远大于json的item value的个数。那如果这种情况下，也是直接遍历`实体类的所有属性`都对json进行一次解析。那么其实就有很多次循环操作都是浪费的。因为json中映射某一个属性值的item项根本就没有，就这样也白白的浪费了一次循环执行。
+可以看到实体类属性的个数远远大于json的item value的个数。
 
-###所以需要区别对待 class mappded count 与 json dic key count 的大小情况
+那如果这种情况下，也是直接遍历`实体类的所有属性`都对json进行一次解析。那么其实就有很多次循环操作都是浪费的。
 
-- (1) class mappded count >= json dic key count 
+因为json中映射某一个属性值的json item value根本就没有值，那么就白白的浪费了一次循环执行的时间。
 
-此种情况下，应该主要依靠json dic本身的所有的Key进行解析。
+###所以需要区别对待 classMapper's property mappded count 与 json dic key count 的大小情况
 
-但是有可能有一些key是`keyPath`或`keyArray`类型的。那么就可能无法在第一轮进行正常解析。
+> `classMapper's property mappded count >= json dic key count` >>>> 此种情况下，应该主要依靠json dic本身的所有的Key进行解析。
 
-那么还需要辅助执行按照`keyPath`或`keyArray`类型进行解析一次。
+- (1) 首先按照json dic.key 找到对应的PropertyMapper来解析json item value
+- (2) 再按照 映射 jsonkeyPath PropertyMapper来解析json item value
+- (3) 再按照 映射 jsonKeyArray PropertyMapper来解析json item value
+
+(2)和(3)为了可能有一些key是`keyPath`或`keyArray`类型的，那么就可能无法在第一轮进行正常解析，所以需要辅助执行按照`keyPath`或`keyArray`类型进行解析一次。
 
 这样一来，远远比统统按照实体类属性个数进行循环遍历的次数少的多。
 
-
-- (2) class mappded count < json dic key count 
-
-此种情况下，可以直接遍历体类所有的属性进行解析。
+> `classMapper's property mappded count < json dic key count` >>>> 此种情况下，可以直接遍历体类所有的属性进行解析。
 
 
-- (3) 参考自YYModel的做法，分成如上两种情况
+###参考自YYModel的做法，分成如上两种情况
 
 ```objc
 if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
