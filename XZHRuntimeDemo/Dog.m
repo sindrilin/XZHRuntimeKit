@@ -10,7 +10,7 @@
 #import "Dog.h"
 #import "NSObject+XZHJSONMapping.h"
 @implementation Dog
-+ (NSDictionary *)xzh_customerPropertyNameMappingJSONKey {
++ (NSDictionary *)xzh_customerMappings {
     return @{
              // 属性 : json key
              @"age" : @"p_age",
@@ -33,7 +33,7 @@
 @end
 
 @implementation Cat
-+ (NSDictionary *)xzh_customerPropertyNameMappingJSONKey {
++ (NSDictionary *)xzh_customerMappings {
     return @{
              // 属性 : json key
              @"cid" : @"c_id",

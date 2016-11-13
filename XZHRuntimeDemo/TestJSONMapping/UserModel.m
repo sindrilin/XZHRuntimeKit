@@ -34,7 +34,7 @@
 @end
 
 @implementation XZHRuntimeUserModel
-+ (NSDictionary *)xzh_customerPropertyNameMappingJSONKey {
++ (NSDictionary *)xzh_customerMappings {
     return @{
              @"userID" : @"id",
              @"avatarURL" : @"avatar_url",

@@ -172,7 +172,7 @@ typedef NS_ENUM(NSInteger, XZHTypeEncoding) {
     XZHTypeEncodingPropertyReadonly                                         = 1<<21,
     XZHTypeEncodingPropertyStrong                                           = 1<<22,
     XZHTypeEncodingPropertyWeak                                             = 1<<23,
-    XZHTypeEncodingPropertyOldStyleCoding                                   = 1<<24, //iOS SDK版本太老，现在基本上用不到
+//    XZHTypeEncodingPropertyOldStyleCoding                                   = 1<<24, //iOS SDK版本太老，现在基本上用不到
 };
 
 /**

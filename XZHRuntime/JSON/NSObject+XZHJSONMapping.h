@@ -19,12 +19,31 @@ void xzh_setNoNeedDefaultJSONValueHandle();
  *  1) JSON String、JSON Data、JSON Dictionary、Array JSON >>> model、model array
  *  2) model >>> json、json字符串、json data、字典
  */
-@interface NSObject (XZHJSONMappingTools)
+@interface NSObject (XZHJSONModelMapping)
+
+/**
+ *  json to model:
+ *  - (1) @param JSON NSDictioanry
+ *  - (2) @param JSON NSString
+ *  - (3) @param JSON NSData
+ *  - (4) @param JSON Array
+ *
+ *  (2)、(3)、(4) >>>> (1)
+ */
 
 + (instancetype)xzh_modelFromObject:(id)obj;
 + (instancetype)xzh_modelFromJSONDictionary:(NSDictionary *)jsonDic;
 + (instancetype)xzh_modelFromJSONString:(NSString *)jsonString;
 + (instancetype)xzh_modelFromJSONData:(NSData *)jsonData;
+
+/**
+ *  model to json obejct:
+ *  - (1) @return NSDictionary、NSArray
+ *  - (2) @return NSData
+ *  - (3) @return NSString
+ *
+ *  (3) >>> (2) >>> (1)
+ */
 
 - (instancetype)xzh_modelToJSONObject;
 - (instancetype)xzh_modelToJSONString;
@@ -33,15 +52,15 @@ void xzh_setNoNeedDefaultJSONValueHandle();
 @end
 
 /**
- *  选择性实现该协议的方法
+ *  选择性实现如下方法，个性化配置json与model的映射规则:
  */
-@protocol XZHJSONMappingConfig
+@protocol XZHJSONModelMappingRules
 @optional
 /**
  *  定制属性名与json key的映射
  *  eg、{属性名 : jsonKey}
  */
-+ (NSDictionary *)xzh_customerPropertyNameMappingJSONKey;
++ (NSDictionary *)xzh_customerMappings;
 
 /**
  *  不被映射的json key

@@ -494,9 +494,9 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                     typeEncoding |= XZHTypeEncodingPropertyNonatomic;
                 }
                     break;
-                case 't': {
-                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
-                }
+//                case 't': {
+//                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
+//                }
                     break;
                 case 'R': {
                     typeEncoding |= XZHTypeEncodingPropertyReadonly;

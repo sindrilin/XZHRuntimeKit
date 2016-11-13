@@ -630,33 +630,26 @@ struct Node {
 }
 
 - (void)testJSONMapping2 {
-    id json = @{
-                @"name" : @"dog001",
-                @"data" : @{
-//                            @"uid" : @(100001),
-//                            @"uid" : @"100001",
-//                            @"uid" : @"nil",
-//                            @"uid" : @"Nil",
-//                            @"uid" : @"NULL",
-//                            @"uid" : @"null",
-//                            @"uid" : @"<null>",
-//                            @"uid" : [NSNull null],
-                        },
-                @"p_age" : @"21",
-//                @"address1" : @"address1......",
-//                @"address2" : @"address2......",
-//                @"address3" : @"address3......",
-                @"user" : @{
-                        @"city" : @{
-                                @"address" : @"address4.....",
-                                },
-                        },
-                @"sex" : @"男",
-                };
-    
-    Dog *dog = [Dog xzh_modelFromObject:json];
-    
-    NSLog(@"");
+id json = @{
+            @"name" : @"dog001",
+            @"data" : @{
+                        @"uid" : @(100001),
+//                            @"uid" : @"100001", NSString >>> NSNumber
+//                            @"uid" : [NSNull null], NSNumber >>> nil
+                    },
+            @"p_age" : @"21",
+            @"address1" : @"address1......",
+            @"address2" : @"address2......",
+            @"address3" : @"address3......",
+            @"user" : @{
+                    @"city" : @{
+                            @"address" : @"address4.....",
+                            },
+                    },
+            @"sex" : @"男",
+            };
+
+Dog *dog = [Dog xzh_modelFromObject:json];
 }
 
 - (void)testJSONMapping3 {
@@ -722,14 +715,9 @@ struct Node {
     id json = @{
                 @"name" : @"dog001",
                 @"data" : @{
-//                        @"uid" : @(100001),
-                        @"uid" : @"100001",
-//                        @"uid" : @"nil",
-//                        @"uid" : @"Nil",
-//                        @"uid" : @"NULL",
-//                        @"uid" : @"null",
-//                        @"uid" : @"<null>",
-//                        @"uid" : [NSNull null],
+                        @"uid" : @(100001),
+//                            @"uid" : @"100001", NSString >>> NSNumber
+//                            @"uid" : [NSNull null], NSNumber >>> nil
                         },
                 @"p_age" : @"21",
                 @"user" : @{
@@ -771,8 +759,6 @@ struct Node {
                             },
                         
                         ],
-//                @"childs" : @[],
-//                @"childs" : [NSNull null],
                 @"date" : @"Wed Dec 25 12:22:19 +0800 2013",
                 @"url" : @"http://tp2.sinaimg.cn/3952070245/180/5737272572/0",
                 @"flag1" : @(0),
@@ -924,18 +910,78 @@ struct Node {
     NSData *data = [NSData dataWithContentsOfFile:path];
     NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     
-//   YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
-    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+   YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+//    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
     
     int count = 100000;
     double date_s = CFAbsoluteTimeGetCurrent();
     for (int i = 0; i < count; i++) {
-        id json = [model xzh_modelToJSONObject];
-//        id json = [model yy_modelToJSONObject];
+//        id json = [model xzh_modelToJSONObject];
+        id json = [model yy_modelToJSONObject];
 //        NSLog(@"");
     }
     double date_current = CFAbsoluteTimeGetCurrent() - date_s;
     NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
+}
+
+- (void)testJSONMapping9 {
+    id json = @{
+        @"name" : @"dog001",
+        @"data" : @{
+                    @"uid" : @"100001",
+                },
+        @"p_age" : @"21",
+        @"user" : @{
+                @"city" : @{
+                        @"address" : @"address4.....",
+                        },
+                },
+        @"sex" : @"男",
+        @"cat" : @{
+                @"c_id" : @"111111",
+                @"c_name" : @"cat_0000001",
+                },
+        @"animal" : @{
+                @"cat" : @{
+                        @"c_id" : @"111111",
+                        @"c_name" : @"cat_0000001",
+                        },
+                
+                },
+        @"childs" : @[
+                @{
+                    @"cid" : @"001",
+                    @"name" : @"child_001",
+                    },
+                @{
+                    @"cid" : @"002",
+                    @"name" : @"child_002",
+                    },
+                @{
+                    @"cid" : @(003),
+                    @"name" : @"child_003",
+                    },
+                @{
+                    @"cid" : @(004),
+                    @"name" : @"child_004",
+                    },
+                @{
+                    @"cid" : @"005",
+                    @"name" : @"child_005",
+                    },
+                
+                ],
+        @"date" : @"Wed Dec 25 12:22:19 +0800 2013",
+        @"url" : @"http://tp2.sinaimg.cn/3952070245/180/5737272572/0",
+        @"flag1" : @(0),
+        @"flag2" : @(1),
+        @"flag3" : @"0",
+        @"flag4" : @"1",
+        };
+    
+    Dog *dog = [Dog xzh_modelFromJSONDictionary:json];
+    id jsonObj = [dog xzh_modelToJSONObject];
+    
 }
 
 - (void)testHash {
@@ -983,7 +1029,8 @@ struct Node {
 //    [self testJSONMapping7];
 //    [self testHash];
 //    [self testTypeConvert];
-    [self testJSONMapping8];
+//    [self testJSONMapping8];
+    [self testJSONMapping9];
 }
 
 

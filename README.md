@@ -4,7 +4,7 @@
 
 主要是将一些常用的基于runtime的代码整合起来:
 
-- (1) JSON 与 Model （正在做ing）
+- (1) JSON 与 Model （结束）
 - (2) Model （正在做ing）
 	- 拷贝
 	- 归档
@@ -12,13 +12,172 @@
 - (4) ORM	(没开始)
 - (5) Cache (没开始)
 
-下面是记录一些代码实现过程中遇到的一些问题和学习笔记。
 
-##opensouece
+###JSON 与 Model用法demo
+
+实体类
+
+```objc
+@interface Dog : NSObject
+@property (nonatomic, copy) NSString *name;
+@property (nonatomic, assign) NSInteger uid;
+@property (nonatomic, assign) NSInteger age;
+@property (nonatomic, copy) NSString *address;
+@property (nonatomic, copy) NSString *sex1;
+@property (nonatomic, copy) NSString *sex2;
+@property (nonatomic, copy) NSString *sex3;
+@property (nonatomic, strong) Cat *cat;
+@property (nonatomic, strong) NSArray *childs;
+@property (nonatomic, strong) NSURL *url;
+@property (nonatomic, strong) NSDate *date;
+@property (nonatomic, assign) BOOL flag1;
+@property (nonatomic, assign) BOOL flag2;
+@property (nonatomic, assign) BOOL flag3;
+@property (nonatomic, assign) BOOL flag4;
+@property (nonatomic, assign) BOOL flag5;
+@property (nonatomic, assign) int flag6;
+@property (nonatomic, assign) NSInteger flag7;
+@property (nonatomic, assign) BOOL flag8;
+@end
+@implementation Dog
++ (NSDictionary *)xzh_customerMappings {
+    return @{
+             // 属性 : json key
+             @"age" : @"p_age",
+             @"uid" : @"data.uid",
+             @"address" : @[@"address1", @"address2", @"address3", @"user.city.address"],
+             @"sex1" : @"sex",
+             @"sex2" : @"sex",
+             @"sex3" : @"sex",
+             @"cat" : @"animal.cat",
+             };
+}
++ (NSDictionary *)xzh_classInArray {
+    return @{
+             @"childs" : [Child class],
+             };
+}
++ (NSString *)xzh_dateFormat {
+    return @"EEE MMM dd HH:mm:ss Z yyyy";
+}
+@end
+
+@interface Cat : NSObject
+@property (nonatomic, assign) NSInteger cid;
+@property (nonatomic, copy) NSString *name;
+@end
+@implementation Cat
++ (NSDictionary *)xzh_customerMappings {
+    return @{
+             // 属性 : json key
+             @"cid" : @"c_id",
+             @"name" : @"c_name",
+             };
+}
+@end
+```
+
+下面是对应的json
+
+```objc
+id json = @{
+    @"name" : @"dog001",
+    @"data" : @{
+                @"uid" : @"100001",
+            },
+    @"p_age" : @"21",
+    @"user" : @{
+            @"city" : @{
+                    @"address" : @"address4.....",
+                    },
+            },
+    @"sex" : @"男",
+    @"cat" : @{
+            @"c_id" : @"111111",
+            @"c_name" : @"cat_0000001",
+            },
+    @"animal" : @{
+            @"cat" : @{
+                    @"c_id" : @"111111",
+                    @"c_name" : @"cat_0000001",
+                    },
+            
+            },
+    @"childs" : @[
+            @{
+                @"cid" : @"001",
+                @"name" : @"child_001",
+                },
+            @{
+                @"cid" : @"002",
+                @"name" : @"child_002",
+                },
+            @{
+                @"cid" : @(003),
+                @"name" : @"child_003",
+                },
+            @{
+                @"cid" : @(004),
+                @"name" : @"child_004",
+                },
+            @{
+                @"cid" : @"005",
+                @"name" : @"child_005",
+                },
+            
+            ],
+    @"date" : @"Wed Dec 25 12:22:19 +0800 2013",
+    @"url" : @"http://tp2.sinaimg.cn/3952070245/180/5737272572/0",
+    @"flag1" : @(0),
+    @"flag2" : @(1),
+    @"flag3" : @"0",
+    @"flag4" : @"1",
+};
+```
+
+json to model
+
+```objc
+Dog *dog = [Dog xzh_modelFromJSONDictionary:json];
+```
+
+model to json
+
+```objc
+id jsonObj = [dog xzh_modelToJSONObject];
+```
+
+上面的json model的例子，基本上常用的映射方式基本就满足了。
+
+然后和YYModel进行了下解析时间比较，拿的YYModel代码中的`user.json`进行比较，同时进行10W次json解析时间对比，测试机器是`iphone 5s`。
+
+```objc
+NSString *path = [[NSBundle mainBundle] pathForResource:@"user" ofType:@"json"];
+NSData *data = [NSData dataWithContentsOfFile:path];
+NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    
+int count = 100000;
+double date_s = CFAbsoluteTimeGetCurrent();
+for (int i = 0; i < count; i++) {
+//       YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+//        NSLog(@"");
+}
+double date_current = CFAbsoluteTimeGetCurrent() - date_s;
+NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
+```
+
+速度稍微快于YYModel，因为我去掉了YYModel中提供各种null字符串的比较，然后对应的转换成0和1的逻辑。这一部分的代码是比较耗时的。而且觉得好像作用也并不是很大....
+
+然后主要是大量使用了CoreFoundation，然后部分的代码逻辑。不过还是非常的膜拜YY大神，从中学习到了n多的东西....
+
+##下面是记录一些代码实现过程中遇到的一些问题和学习笔记。
+
+###opensouece
 
 http://opensource.apple.com/source/objc4/objc4-237/runtime/
 
-##type encodings
+###type encodings
 
 http://opensource.apple.com/source/objc4/objc4-237/runtime/objc-class.h
 
@@ -1739,7 +1898,23 @@ Other rules may apply. Calling isValidJSONObject(_:) or attempting a conversion 
 
 所以，当model转json的时候，需要注意如上几点。如果`isValidJSONObject:`返回NO，就需要对当前model进行json化转换处理，按照上面4点进行转换即可。
 
-###Thread Safety
+###Json Serialization Thread Safety
 
 On iOS 7 and later and macOS 10.9 and laterNSJSONSerialization is thread safe.
 
+##JSON To Model过程中，对内存缓存dic的读/写，都使用了`dispatch_semephore_t`进行多线程同步互斥，所以可以在任意子线程上进行解析json
+
+- (1) XZHClassMapper 解析对应Class时候做了缓存
+	- XZHClassModel 
+	- PropertyMapper List
+	
+- (2) XZHClassModel 解析对应Class时候做了缓存
+	- Property List
+	- Ivar List
+	- Method List
+	- Category List
+	- .......
+
+做缓存的目的就是，不用重复的解析同一个NSObject类的`objc_class`实例。但是对缓存的读/写必须要加锁同步，否则就会出现程序崩溃的问题。
+
+在使用MJExtensions的时候，经常在子线程上解析json的时候就发生崩溃。也给MJ大大反映过，然后看也改了....但是仍然还是有发生崩溃，说明MJ大大在多线程上操作内存缓存的那一块还是有待优化....
