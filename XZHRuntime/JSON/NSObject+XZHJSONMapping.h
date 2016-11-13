@@ -16,7 +16,8 @@
 void xzh_setNoNeedDefaultJSONValueHandle();
 
 /**
- *  JSON String/JSON Data/JSON Dictionary/Array JSON
+ *  1) JSON String、JSON Data、JSON Dictionary、Array JSON >>> model、model array
+ *  2) model >>> json、json字符串、json data、字典
  */
 @interface NSObject (XZHJSONMappingTools)
 
@@ -26,7 +27,6 @@ void xzh_setNoNeedDefaultJSONValueHandle();
 + (instancetype)xzh_modelFromJSONData:(NSData *)jsonData;
 
 - (instancetype)xzh_modelToJSONObject;
-- (NSDictionary *)xzh_modelToJSONDictionary;
 - (instancetype)xzh_modelToJSONString;
 - (instancetype)xzh_modelToJSONData;
 

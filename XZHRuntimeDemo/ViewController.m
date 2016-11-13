@@ -163,6 +163,7 @@ struct Node {
 @property (nonatomic, assign) NSValue *ivar26;
 //@property (nonatomic, assign) c array ?
 
+@property (nonatomic, strong) NSMutableArray *ivar27;
 @end
 
 @implementation ViewController {
@@ -910,8 +911,28 @@ struct Node {
     int count = 100000;
     double date_s = CFAbsoluteTimeGetCurrent();
     for (int i = 0; i < count; i++) {
-//        [YYModelUserModel yy_modelWithJSON:json];
-        [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+//       YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+        XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+//        NSLog(@"");
+    }
+    double date_current = CFAbsoluteTimeGetCurrent() - date_s;
+    NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
+}
+
+- (void)testJSONMapping8 {
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"user" ofType:@"json"];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    
+//   YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+    
+    int count = 100000;
+    double date_s = CFAbsoluteTimeGetCurrent();
+    for (int i = 0; i < count; i++) {
+        id json = [model xzh_modelToJSONObject];
+//        id json = [model yy_modelToJSONObject];
+//        NSLog(@"");
     }
     double date_current = CFAbsoluteTimeGetCurrent() - date_s;
     NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
@@ -933,6 +954,15 @@ struct Node {
     
 }
 
+- (void)testTypeConvert {
+    //NSMutableArray对象
+    NSMutableArray *arr = [@[@"1", @"2"] mutableCopy];
+    
+    //将NSMutableArray对象，按照NSArray类型设置
+    ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(self, @selector(setIvar27:), arr);
+    
+    [_ivar27 addObject:@"3"];
+}
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
 //    [self testProtocol];
@@ -950,8 +980,10 @@ struct Node {
 //    [self testJSONMapping4];
 //    [self testJSONMapping5];
 //    [self testJSONMapping6];
-    [self testJSONMapping7];
+//    [self testJSONMapping7];
 //    [self testHash];
+//    [self testTypeConvert];
+    [self testJSONMapping8];
 }
 
 

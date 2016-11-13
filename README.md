@@ -1717,3 +1717,29 @@ static xzh_force_inline NSString* XZHConvertNullNSString(__unsafe_unretained id 
 
 因为这些key值都太相似，NSDictionary在查找的时候，效率降低了很多。所以，暂时先把这个过滤null字符串的处理先去掉了。
 
+##model to json
+
+###苹果对可以json化的OC对象的要求
+
+https://developer.apple.com/reference/foundation/jsonserialization
+
+```
+An object that may be converted to JSON must have the following properties:
+
+- (1) The top level object is an NSArray or NSDictionary.
+
+- (2) All objects are instances of NSString, NSNumber, NSArray, NSDictionary, or NSNull.
+
+- (3) All dictionary keys are instances of NSString.
+
+- (4) Numbers are not NaN or infinity.
+
+Other rules may apply. Calling isValidJSONObject(_:) or attempting a conversion are the definitive ways to tell if a given object can be converted to JSON data.
+```
+
+所以，当model转json的时候，需要注意如上几点。如果`isValidJSONObject:`返回NO，就需要对当前model进行json化转换处理，按照上面4点进行转换即可。
+
+###Thread Safety
+
+On iOS 7 and later and macOS 10.9 and laterNSJSONSerialization is thread safe.
+
