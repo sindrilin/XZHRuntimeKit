@@ -220,7 +220,7 @@ typedef struct {
 } objc_property_attribute_t;
 ```
 
-```
+```c
 `T` >>> 表示属性生成的实例变量的类型编码
 `V` >>> 标示实例变量的名字
 `R` >>> The property is read-only (readonly).
@@ -280,84 +280,7 @@ T@NSString、T@Person、Ti
 - `?` >>> An unknown type (among other things, this code is used for function pointers)
 ```
 
-可以大致分为三类:
-
-```
-1. 基本数据类型（int、float、bool、....）
-2. Foundation 对象
-3. c指针类型
-	- char *
-	- struct/union
-	- c array
-	- CoreFoundation 实例
-		- Class、Property、Ivar、Method、SEL、IMP....
-		- CF.....Ref
-```
-
-###Method 编码
-
-```
-- `r` >>> const
-- `n` >>> in
-- `N` >>> inout
-- `o` >>> out
-- `O` >>> bycopy
-- `R` >>> byref
-- `V` >>> oneway
-```
-
-###将这三种编码组合到一个`NS_OPTION`枚举中的结构
-
-```
-- (1) property encodings
-     - `T` >>> 表示属性生成的实例变量的类型编码
-         - `c` >>> A char
-         - `i` >>> An int
-         - `s` >>> A short
-         - `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
-         - `q` >>> A long long
-         - `C` >>> An unsigned char
-         - `I` >>> An unsigned int
-         - `S` >>> An unsigned short
-         - `L` >>> An unsigned long
-         - `Q` >>> An unsigned long long
-         - `f` >>> A float
-         - `d` >>> A double
-         - `B` >>> A C++ bool or a C99 _Bool
-         - `v` >>> A void
-         - `*` >>> A character string (char *)
-         - `@` >>> An object (whether statically typed or typed id)
-         - `#` >>> A class object (Class)
-         - `:` >>> A method selector (SEL)
-         - `[array type]` >>> An array
-         - `{name=type...}` >>> A structure
-         - `(name=type...)` >>>  A union
-         - `bnum` >>> A bit field of num bits
-         - `^type` >>> A pointer to type
-         - `?` >>> An unknown type (among other things, this code is used for function pointers)
-	- `V` >>> 标示实例变量的名字
-	- `R` >>> The property is read-only (readonly).
-	- `C` >>> The property is a copy of the value last assigned (copy).
-	- `&` >>> The property is a reference to the value last assigned (retain).
-	- `N` >>> The property is non-atomic (nonatomic).
-	- `G` >>> The property defines a custom getter sel
-	- `S` >>> The property defines a custom setter sel
-	- `D` >>> The property is dynamic (@dynamic)
-	- `W` >>> The property is a weak reference (__weak)
-	- `P` >>> The property is eligible for garbage collection
-	- `t` >>> Specifies the type using old-style encoding
- 
- - (2) method encodings
-    - `r` >>> const
-	- `n` >>> in
-	- `N` >>> inout
-	- `o` >>> out
-	- `O` >>> bycopy
-	- `R` >>> byref
-	- `V` >>> oneway
-```
-
-类型小结
+可以大致分为组成:
 
 ```
 - 基本数值类型
@@ -416,6 +339,76 @@ enum _NSObjCValueType {
     NSObjCBitfield = 'b'
 } NS_DEPRECATED(10_0, 10_5, 2_0, 2_0);
 ```
+
+
+###Method 编码
+
+```
+- `r` >>> const
+- `n` >>> in
+- `N` >>> inout
+- `o` >>> out
+- `O` >>> bycopy
+- `R` >>> byref
+- `V` >>> oneway
+```
+
+###将这三种编码组合到一个`NS_OPTION(){}`枚举中的结构
+
+```c
+- (1) Ivar 数据类型的 type encodings: 1 ~ 8位 >>> 单选 >>>> Mask: 0xFF
+- (2) Property 各种修饰符的 type encodings: 9 ~ 15位 >>>> 多选 >>>> Mask: 0xFF00
+- (3) Method  各种修饰符的 type encodings: 16 ~ 23位 >>>> 多选 >>>> Mask: 0xFF0000
+```
+
+###具体解析一个`objc_property`实例的type encodings时的逻辑
+
+```c
+- (1) property's type encodings >>>> 
+    - `T` >>> 标示@property的type encodings字符串，eg: T@"NSString",C,N,V_name
+        - 基本数值数据类型(c数据类型)
+            - `c` >>> A char
+            - `i` >>> An int
+            - `s` >>> A short
+            - `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
+            - `q` >>> A long long
+            - `C` >>> An unsigned char
+            - `I` >>> An unsigned int
+            - `S` >>> An unsigned short
+            - `L` >>> An unsigned long
+            - `Q` >>> An unsigned long long
+            - `f` >>> A float
+            - `d` >>> A double
+            - `B` >>> A C++ bool or a C99 _Bool
+        - Foundation类型
+            - `@` >>> An object (whether statically typed or typed id)
+                - eg、@NSString、@NSArray、@Person ...
+            - `?` >>> An unknown type (among other things, this code is used for function pointers)
+                -  `@?` ===> NSBlock
+            - 长度一定是大于等于2，才是有效的Foundation类型
+        - CoreFoundation类型
+            - `#` >>> A class object (Class)
+            - `:` >>> A method selector (SEL)
+            - `[array type]` >>> An array
+            - `{name=type...}` >>> A structure
+            - `(name=type...)` >>>  A union
+            - `bnum` >>> A bit field of num bits
+            - `^type` >>> A pointer to type
+            - `v` >>> A void
+            - `*` >>> A character string (char *)
+    - `V` >>> 标示实例变量的名字
+    - `R` >>> The property is read-only (readonly).
+    - `C` >>> The property is a copy of the value last assigned (copy).
+    - `&` >>> The property is a reference to the value last assigned (retain).
+    - `N` >>> The property is non-atomic (nonatomic).
+    - `G` >>> The property defines a custom getter sel
+    - `S` >>> The property defines a custom setter sel
+    - `D` >>> The property is dynamic (@dynamic)
+    - `W` >>> The property is a weak reference (__weak)
+    - `P` >>> The property is eligible for garbage collection
+    - `t` >>> Specifies the type using old-style encoding
+```
+
 
 ##c类型的编码、以及使用NSValue包装
 

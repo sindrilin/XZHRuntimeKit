@@ -1024,13 +1024,13 @@ Dog *dog = [Dog xzh_modelFromObject:json];
 //    [self testJSONMapping2];
 //    [self testJSONMapping3];
 //    [self testJSONMapping4];
-//    [self testJSONMapping5];
+    [self testJSONMapping5];
 //    [self testJSONMapping6];
 //    [self testJSONMapping7];
 //    [self testHash];
 //    [self testTypeConvert];
 //    [self testJSONMapping8];
-    [self testJSONMapping9];
+//    [self testJSONMapping9];
 }
 
 

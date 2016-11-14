@@ -118,6 +118,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		217035031DD8AFB200E1FEAE /* TestCopy */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = TestCopy;
+			sourceTree = "<group>";
+		};
 		2E2FF2C51DB6206E005B900F /* Swizzle */ = {
 			isa = PBXGroup;
 			children = (
@@ -159,6 +166,7 @@
 		2E5D4B2D1D7049F90081EAA1 /* XZHRuntimeDemo */ = {
 			isa = PBXGroup;
 			children = (
+				217035031DD8AFB200E1FEAE /* TestCopy */,
 				2EAB4F791DC755D700F0A3F9 /* TestJSONMapping */,
 				2EA38B5E1DB60EC60077610E /* XZHRuntime */,
 				2E5D4B311D7049F90081EAA1 /* AppDelegate.h */,
@@ -207,7 +215,6 @@
 			isa = PBXGroup;
 			children = (
 				2EA38B651DB60EC60077610E /* Core */,
-				2EAB4F781DC7537600F0A3F9 /* Model */,
 				2E2FF2C91DB620B6005B900F /* Associate */,
 				2E2FF2C51DB6206E005B900F /* Swizzle */,
 				2EA38B5F1DB60EC60077610E /* Archive */,
@@ -271,14 +278,6 @@
 			);
 			path = Observer;
 			sourceTree = "<group>";
-		};
-		2EAB4F781DC7537600F0A3F9 /* Model */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			name = Model;
-			path = XZHRuntime/Model;
-			sourceTree = SOURCE_ROOT;
 		};
 		2EAB4F791DC755D700F0A3F9 /* TestJSONMapping */ = {
 			isa = PBXGroup;

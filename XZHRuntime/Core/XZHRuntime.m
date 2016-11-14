@@ -520,8 +520,28 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
     return self;
 }
 
+- (BOOL)isEqualToProperty:(XZHPropertyModel *)property {
+    if (self == property) {return YES;}
+    if (!property.name || ![_name isEqualToString:property.name]) {return NO;}
+    if (_typeEncoding != property.typeEncoding) {return NO;}
+    if (_foundationType != property.foundationType) {return NO;}
+    if (!property.encodingString || ![_encodingString isEqualToString:property.encodingString] ) {return NO;}
+    return YES;
+}
+
+- (BOOL)isEqual:(id)object {
+    if ([self class] == [object class]) {
+        return [self isEqualToProperty:object];
+    } else {
+        return [super isEqual:object];
+    }
+}
+
+- (NSUInteger)hash {
+    return [_name hash] ^ (NSUInteger)(void *)_getter * (NSUInteger)(void *)_setter ^ _typeEncoding ^ _foundationType ^ [_encodingString hash];
+}
+
 - (NSString *)description {
-//    return [NSString stringWithFormat:@"<%@ - %p> name = %@, getter = %@, setter = %@, cls = %@, attributesString = %@", [self class], self, _name, NSStringFromSelector(_getter), NSStringFromSelector(_setter), _cls, _attributesString];
     return [NSString stringWithFormat:@"<%@ - %p> name = %@, getter = %@, setter = %@, cls = %@", [self class], self, _name, NSStringFromSelector(_getter), NSStringFromSelector(_setter), _cls];
 }
 
@@ -546,7 +566,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
         
         /**
          *  retrun type encoding
-         *  这里不使用method_getReturnType(method, char *dst, size_t dst_len)因为需要分配一个固定长度的字符串
+         *  这里不使用method_getReturnType(method, char *dst, size_t dst_len)，因为需要分配一个固定长度的字符串
          */
         char *c_returnType = method_copyReturnType(method);
         if (NULL != c_returnType) {
@@ -575,7 +595,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
         }
         
         /**
-         *  OC方法本身的编码
+         *  method type encoding
          */
         const char*method_type = method_getTypeEncoding(method);
         _type = [NSString stringWithUTF8String:method_type];
@@ -584,7 +604,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 }
 
 - (NSString *)description {
-    return [NSString stringWithFormat:@"<%@ - %p> sel = %@", [self class], self, _selString];
+    return [NSString stringWithFormat:@"<%@ - %p> sel = %@， returnType = %@, argumentTypes = %@, type = %@", [self class], self, _selString, _returnType, _argumentTypes, _type];
 }
 
 - (NSString *)debugDescription {
@@ -665,7 +685,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 @implementation XZHCategoryModel
 @end
 
-static dispatch_semaphore_t semaphore;
+static dispatch_semaphore_t semaphore = NULL;
 @implementation XZHClassModel {
     @package
     Class __unsafe_unretained _cls;     //解析的objc_class实例

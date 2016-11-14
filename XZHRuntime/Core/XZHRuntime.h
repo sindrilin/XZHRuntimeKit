@@ -13,63 +13,71 @@
 #define xzh_force_inline __inline__ __attribute__((always_inline))
 
 /**
- *  Objective-C中所有数据类型的type encodings定义，主要分为三类（参考自YYModel）:
- *
- *  1. Ivar/ReturnValue返回值 类型编码，只能够是其中一种
- *  2. Method的编码，方法修饰符，可以互相叠加
- *  3. Property的编码，属性读取修饰符、getter/setter生成修饰符、内存管理修饰符，可以互相叠加
- *
- *  所有的类型编码可参考: https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
- *
- * 如下是个人小结编码字符串所有类型组成
+ * 
+    ************************************************************************************************
+    Objective-C中所有数据类型的type encodings定义，主要分为三类（参考自YYModel）:
+        - (1) Ivar/ReturnValue返回值 类型编码  >>>>  单选
+        - (2) Method的编码，方法修饰符   >>>>  多选
+        - (3) Property的编码，属性读取修饰符、getter/setter生成修饰符、内存管理修饰符   >>>>  多选
+ 
+    我觉得其实Ivar的编码包括在Property的编码中。
+    所有的类型编码可参考: https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
     
- - (1) property encodings
-     - `T` >>> 表示属性生成的实例变量的类型编码
-         - `c` >>> A char
-         - `i` >>> An int
-         - `s` >>> A short
-         - `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
-         - `q` >>> A long long
-         - `C` >>> An unsigned char
-         - `I` >>> An unsigned int
-         - `S` >>> An unsigned short
-         - `L` >>> An unsigned long
-         - `Q` >>> An unsigned long long
-         - `f` >>> A float
-         - `d` >>> A double
-         - `B` >>> A C++ bool or a C99 _Bool
-         - `v` >>> A void
-         - `*` >>> A character string (char *)
-         - `@` >>> An object (whether statically typed or typed id)
-         - `#` >>> A class object (Class)
-         - `:` >>> A method selector (SEL)
-         - `[array type]` >>> An array
-         - `{name=type...}` >>> A structure
-         - `(name=type...)` >>>  A union
-         - `bnum` >>> A bit field of num bits
-         - `^type` >>> A pointer to type
-         - `?` >>> An unknown type (among other things, this code is used for function pointers)
-	- `V` >>> 标示实例变量的名字
-	- `R` >>> The property is read-only (readonly).
-	- `C` >>> The property is a copy of the value last assigned (copy).
-	- `&` >>> The property is a reference to the value last assigned (retain).
-	- `N` >>> The property is non-atomic (nonatomic).
-	- `G` >>> The property defines a custom getter sel
-	- `S` >>> The property defines a custom setter sel
-	- `D` >>> The property is dynamic (@dynamic)
-	- `W` >>> The property is a weak reference (__weak)
-	- `P` >>> The property is eligible for garbage collection
-	- `t` >>> Specifies the type using old-style encoding
- 
- - (2) method encodings
-    - `r` >>> const
-	- `n` >>> in
-	- `N` >>> inout
-	- `o` >>> out
-	- `O` >>> bycopy
-	- `R` >>> byref
-	- `V` >>> oneway
- 
+    ************************************************************************************************
+    如下是参考YYModel，将如上三种type encoding集合在一起的结构:
+     - (1) property's type encodings >>>> 
+        - `T` >>> 标示@property的type encodings字符串，eg: T@"NSString",C,N,V_name
+            - 基本数值数据类型(c数据类型)
+                - `c` >>> A char
+                - `i` >>> An int
+                - `s` >>> A short
+                - `l` >>> A long（l is treated as a 32-bit quantity on 64-bit programs.）
+                - `q` >>> A long long
+                - `C` >>> An unsigned char
+                - `I` >>> An unsigned int
+                - `S` >>> An unsigned short
+                - `L` >>> An unsigned long
+                - `Q` >>> An unsigned long long
+                - `f` >>> A float
+                - `d` >>> A double
+                - `B` >>> A C++ bool or a C99 _Bool
+            - Foundation类型
+                - `@` >>> An object (whether statically typed or typed id)
+                    - eg、@NSString、@NSArray、@Person ...
+                - `?` >>> An unknown type (among other things, this code is used for function pointers)
+                    -  `@?` ===> NSBlock
+                - 长度一定是大于等于2，才是有效的Foundation类型
+            - CoreFoundation类型
+                - `#` >>> A class object (Class)
+                - `:` >>> A method selector (SEL)
+                - `[array type]` >>> An array
+                - `{name=type...}` >>> A structure
+                - `(name=type...)` >>>  A union
+                - `bnum` >>> A bit field of num bits
+                - `^type` >>> A pointer to type
+                - `v` >>> A void
+                - `*` >>> A character string (char *)
+        - `V` >>> 标示实例变量的名字
+        - `R` >>> The property is read-only (readonly).
+        - `C` >>> The property is a copy of the value last assigned (copy).
+        - `&` >>> The property is a reference to the value last assigned (retain).
+        - `N` >>> The property is non-atomic (nonatomic).
+        - `G` >>> The property defines a custom getter sel
+        - `S` >>> The property defines a custom setter sel
+        - `D` >>> The property is dynamic (@dynamic)
+        - `W` >>> The property is a weak reference (__weak)
+        - `P` >>> The property is eligible for garbage collection
+        - `t` >>> Specifies the type using old-style encoding
+     
+     - (2) method's type encodings
+        - `r` >>> const
+        - `n` >>> in
+        - `N` >>> inout
+        - `o` >>> out
+        - `O` >>> bycopy
+        - `R` >>> byref
+        - `V` >>> oneway
+    ************************************************************************************************
  */
 typedef NS_ENUM(NSInteger, XZHTypeEncoding) {
     
@@ -223,11 +231,8 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
  *  只有那些在运行时register的OC类，才可以添加Ivar
  */
 @property (nonatomic, assign, readonly) ptrdiff_t offset;
-
 - (instancetype)initWithIvar:(Ivar)ivar;
-
 - (BOOL)isEqualToIvar:(XZHIvarModel *)object;
-
 @end
 
 /**
@@ -256,7 +261,7 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 @property (nonatomic, assign, readonly) BOOL isKVCCompatible;// Ivar值是否能够使用KVC
 
 - (instancetype)initWithProperty:(objc_property_t)property;
-
+- (BOOL)isEqualToProperty:(XZHPropertyModel *)property;
 @end
 
 /*
