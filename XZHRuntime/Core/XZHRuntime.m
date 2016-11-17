@@ -58,7 +58,7 @@ Class XZHGetNSBlockClass() {
     dispatch_once(&onceToken, ^{
         void (^block)(void) = ^(){};
         Class cls = [(NSObject*)block class];
-        while (cls && (class_getSuperclass(cls) != [NSObject class]) ) {//一直遍历到NSObject停止
+        while (cls && (class_getSuperclass(cls) != [NSObject class]) ) {//>>> 一直遍历到NSObject停止
             cls = class_getSuperclass(cls);
         }
         NSBlock = cls;
@@ -120,26 +120,6 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
     return XZHGetClassFoundationType([obj class]);
 }
 
-//BOOL XZHIsCNumberWithEncodingType(XZHTypeEncoding encodiding) {
-//    switch (encodiding & XZHTypeEncodingDataTypeMask) {
-//        case XZHTypeEncodingChar:
-//        case XZHTypeEncodingUnsignedChar:
-//        case XZHTypeEncodingBOOL:
-//        case XZHTypeEncodingShort:
-//        case XZHTypeEncodingUnsignedShort:
-//        case XZHTypeEncodingInt:
-//        case XZHTypeEncodingUnsignedInt:
-//        case XZHTypeEncodingFloat:
-//        case XZHTypeEncodingLong32:
-//        case XZHTypeEncodingUnsignedLong:
-//        case XZHTypeEncodingUnsignedLongLong:
-//        case XZHTypeEncodingDouble:
-//        case XZHTypeEncodingLongDouble:
-//            return YES;
-//    }
-//    return NO;
-//}
-
 @implementation XZHIvarModel {
     @package
     Ivar _ivar;
@@ -199,60 +179,161 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
         const char *c_name = property_getName(property);
         if (NULL != c_name) {_name = [NSString stringWithUTF8String:c_name];}
         
-        //eg、"Tq,N,V_price"、T@"NSString",C,N,V_name 属性的整穿编码字符串
+        //eg、"Tq,N,V_price"、T@"NSString",C,N,V_name 属性的整串编码字符串
         const char *c_attributes = property_getAttributes(property);
         if (NULL != c_attributes) {_encodingString = [NSString stringWithUTF8String:c_attributes];}
         
         /**
-         *  获取一个@property属性的所有项的name与value
-         *
-         *  - name = T, value = @NSString、@NSArray、c、q、L ...
-         *  - name = C, value =
-         *  - name = N, value =
-         *  - name = V, value = _name
-         *
-         *  上面这些name是可以叠加的，所以使用位移枚举进行|操作叠加
+         *  获取一个@property属性的所有的objc_property_attribute_t实例
+         *  - name = T, value = @NSString、@NSArray、c、q、L ...        >>>> Ivar的数据类型
+         *  - name = C, value =                                        >>>> copy
+         *  - name = N, value =                                        >>>> nonatomic
+         *  - name = V, value = _name                                  >>>> Ivar的名字叫做 _name
          */
-        
-        XZHTypeEncoding typeEncoding = XZHTypeEncodingsUnKnown;
-        
-        /**
-         *  依次比较objc_property_attribute_t.name为属性不同的修饰情况
-         *  https://developer.apple.com/library/mac/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html#//apple_ref/doc/uid/TP40008048-CH100-SW1
-         */
-        
         unsigned int num = 0;
         objc_property_attribute_t *atts = property_copyAttributeList(property, &num);
+        _typeEncoding = XZHTypeEncodingsUnKnown;
+        
         for (int i = 0; i < num; i++) {
             objc_property_attribute_t att = atts[i];
             switch (att.name[0]) {
                 case 'T': {
-                    _foundationType = XZHFoundationTypeNone;
-                    
-                    //att.name >>> "name = T, value = @NSString、@NSArray、@Person"
                     size_t len = strlen(att.value);
                     if (len < 1) {
-                        typeEncoding |= XZHTypeEncodingsUnKnown;
+                        _foundationType = XZHFoundationTypeNone;
                         _isCNumber = NO;
                         _isKVCCompatible = NO;
                     } else {
                         char *tmpValue = (char *)malloc(sizeof(char) * len);
                         strcpy(tmpValue, att.value);
-                        switch (tmpValue[0]) {
-                            case '@': {// Foundation: @?>>>block/@NSArray、@NSString系统类/@Person自定义类
-                                if (len >= 2) {
-                                    typeEncoding |= XZHTypeEncodingFoundationObject;
-                                    if (len == 2) {
-                                        // @? >>> block
+                        if (len == 1) {
+                            switch (tmpValue[0]) {
+                                case '?': {
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case 'c': {//char
+                                    _typeEncoding |= XZHTypeEncodingChar;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'i': {//int
+                                    _typeEncoding |= XZHTypeEncodingInt;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 's': {//short
+                                    _typeEncoding |= XZHTypeEncodingShort;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'l': {//long
+                                    _typeEncoding |= XZHTypeEncodingLong32;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'q': {//long long
+                                    _typeEncoding |= XZHTypeEncodingLongLong;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'C': {//unsigned char
+                                    _typeEncoding |= XZHTypeEncodingUnsignedChar;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'I': {//unsigned int
+                                    _typeEncoding |= XZHTypeEncodingUnsignedInt;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'S': {//unsigned short
+                                    _typeEncoding |= XZHTypeEncodingUnsignedShort;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'L': {//unsigned long
+                                    _typeEncoding |= XZHTypeEncodingUnsignedLong;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'Q': {//unsigned long long
+                                    _typeEncoding |= XZHTypeEncodingUnsignedLongLong;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'f': {//float
+                                    _typeEncoding |= XZHTypeEncodingFloat;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'd': {//double
+                                    _typeEncoding |= XZHTypeEncodingDouble;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'D': {//long double
+                                    _typeEncoding |= XZHTypeEncodingLongDouble;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'B': {//A C++ bool or a C99 _Bool
+                                    _typeEncoding |= XZHTypeEncodingBOOL;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = YES;
+                                }
+                                    break;
+                                case 'v': {//void
+                                    _typeEncoding |= XZHTypeEncodingVoid;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case '*': {//char *
+                                    _typeEncoding |= XZHTypeEncodingCString;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case '#': {//Class
+                                    _typeEncoding |= XZHTypeEncodingObjcClass;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case ':': {//SEL
+                                    _typeEncoding |= XZHTypeEncodingSEL;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                            }
+                        } else {
+                            switch (tmpValue[0]) {
+                                case '@': {
+                                    if (len == 2 && '?' == tmpValue[1]) {//@?
+                                        _typeEncoding |= XZHTypeEncodingFoundationObject;
                                         _foundationType = XZHFoundationTypeNSBlock;
+                                        _isCNumber = NO;
+                                        _isKVCCompatible = YES;
                                     } else {
-                                        // Foundation NSObject
-                                        // NSArray属性类型一、@property (nonatomic, strong) NSArray *arr; >>> type encoding == 'NSArray'
-                                        // NSArray属性类型二、@property (nonatomic, strong) NSArray<协议1,协议2,协议3...> *arr; >>> type encoding == 'NSArray<Animal><Animal2><Animal3>'
-                                        size_t len = strlen(tmpValue);
-                                        size_t idx = 0;
                                         size_t *startArr = malloc(sizeof(size_t) * len/2.0);
                                         size_t *endArr = malloc(sizeof(size_t) * len/2.0);
+                                        size_t idx = 0;
                                         size_t tmp = 0;
                                         while (idx < len) {
                                             if (tmpValue[idx] == '<') {
@@ -266,9 +347,15 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                                         
                                         char *clsName = NULL;
                                         if (0 == tmp) {
+                                            /**
+                                             *  NSArray属性类型一、@property (nonatomic, strong) NSArray *arr; >>> @\"NSArray\"
+                                             */
                                             clsName = XZHSubstring(tmpValue, 2, len - 3);
                                             _cls = objc_getClass(clsName);
                                         } else {
+                                            /**
+                                             *  NSArray属性类型二、@property (nonatomic, strong) NSArray<协议1,协议2,协议3...> *arr; >>> type encoding == @\"NSArray<Animal><Animal2><Animal3>"
+                                             */
                                             idx = 0;
                                             NSMutableArray *protocols = [[NSMutableArray alloc] initWithCapacity:tmp];
                                             while (idx < tmp) {
@@ -289,162 +376,49 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                                             }
                                             _protocols = [protocols copy];
                                         }
+                                        
+                                        _typeEncoding |= XZHTypeEncodingFoundationObject;
                                         _foundationType = XZHGetClassFoundationType(_cls);
+                                        _isCNumber = NO;
+                                        _isKVCCompatible = YES;
                                         free(clsName);clsName = NULL;
                                         free(startArr);startArr = NULL;
                                         free(endArr);endArr = NULL;
                                     }
                                 }
-                                
-                                // 是否支持KVC
-                                _isKVCCompatible = YES;
-                                
-                                // 数值类型是c数值类型orNSNumber类型
-                                if (_foundationType == XZHFoundationTypeNSNumber || _foundationType == XZHFoundationTypeNSDecimalNumber) {
+                                    break;
+                                case '[': {//char[6] >>> [array type]
+                                    _typeEncoding |= XZHTypeEncodingCArray;
+                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
+                                    break;
+                                case '{': {//struct >>> {Node=i^{Node}Bc}
+                                    _typeEncoding |= XZHTypeEncodingCStruct;
+                                    _isKVCCompatible = XZHIsCStructKVCCompatible(tmpValue);
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case '(': {//union
+                                    _typeEncoding |= XZHTypeEncodingCUnion;
+                                    _isKVCCompatible = YES;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case 'b': {//bit field 不使用
+                                    _typeEncoding |= XZHTypeEncodingCBitFields;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
+                                case '^': {//c 指针变量
+                                    _typeEncoding |= XZHTypeEncodingCPointer;
+                                    _isKVCCompatible = NO;
+                                    _isCNumber = NO;
+                                }
+                                    break;
                             }
-                                break;
-                            case 'c': {//char
-                                typeEncoding |= XZHTypeEncodingChar;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'i': {//int
-                                typeEncoding |= XZHTypeEncodingInt;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 's': {//short
-                                typeEncoding |= XZHTypeEncodingShort;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'l': {//long
-                                typeEncoding |= XZHTypeEncodingLong32;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'q': {//long long
-                                typeEncoding |= XZHTypeEncodingLongLong;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'C': {//unsigned char
-                                typeEncoding |= XZHTypeEncodingUnsignedChar;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'I': {//unsigned int
-                                typeEncoding |= XZHTypeEncodingUnsignedInt;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'S': {//unsigned short
-                                typeEncoding |= XZHTypeEncodingUnsignedShort;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'L': {//unsigned long
-                                typeEncoding |= XZHTypeEncodingUnsignedLong;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'Q': {//unsigned long long
-                                typeEncoding |= XZHTypeEncodingUnsignedLongLong;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'f': {//float
-                                typeEncoding |= XZHTypeEncodingFloat;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'd': {//double
-                                typeEncoding |= XZHTypeEncodingDouble;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'D': {//long double
-                                typeEncoding |= XZHTypeEncodingLongDouble;
-                                _isKVCCompatible = NO;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'B': {//A C++ bool or a C99 _Bool
-                                typeEncoding |= XZHTypeEncodingBOOL;
-                                _isKVCCompatible = YES;
-                                _isCNumber = YES;
-                            }
-                                break;
-                            case 'v': {//void
-                                typeEncoding |= XZHTypeEncodingVoid;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '*': {//char *
-                                typeEncoding |= XZHTypeEncodingCString;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '#': {//Class
-                                typeEncoding |= XZHTypeEncodingObjcClass;
-                                _isKVCCompatible = YES;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case ':': {//SEL
-                                typeEncoding |= XZHTypeEncodingSEL;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '[': {//char[6] >>> [array type]
-                                typeEncoding |= XZHTypeEncodingCArray;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '{': {//struct >>> {Node=i^{Node}Bc}
-                                typeEncoding |= XZHTypeEncodingCStruct;
-                                _isKVCCompatible = XZHIsCStructKVCCompatible(tmpValue);
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '(': {//union
-                                typeEncoding |= XZHTypeEncodingCUnion;
-                                _isKVCCompatible = YES;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case 'b': {//bit field 不使用
-                                typeEncoding |= XZHTypeEncodingCBitFields;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
-                            case '^': {//c 指针变量
-                                typeEncoding |= XZHTypeEncodingCPointer;
-                                _isKVCCompatible = NO;
-                                _isCNumber = NO;
-                            }
-                                break;
                         }
-                        
                         free(tmpValue);tmpValue = NULL;
                     }
                 }
@@ -463,58 +437,55 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                     }
                 }
                     break;
-
+                    
                 case 'C': {
-                    typeEncoding |= XZHTypeEncodingPropertyCopy;
+                    _typeEncoding |= XZHTypeEncodingPropertyCopy;
                 }
                     break;
                 case 'G': {
-                    typeEncoding |= XZHTypeEncodingPropertyCustomGetter;
+                    _typeEncoding |= XZHTypeEncodingPropertyCustomGetter;
                     if (att.value) {
                         _getter = sel_registerName(att.value);
                     }
                 }
                     break;
                 case 'S': {
-                    typeEncoding |= XZHTypeEncodingPropertyCustomSetter;
+                    _typeEncoding |= XZHTypeEncodingPropertyCustomSetter;
                     if (att.value) {
                         _setter = sel_registerName(att.value);
                     }
                 }
                     break;
                 case 'D': {
-                    typeEncoding |= XZHTypeEncodingPropertyDynamic;
+                    _typeEncoding |= XZHTypeEncodingPropertyDynamic;
                 }
                     break;
-                case 'P': {
-                    // 不处理
-                }
+                    //                case 'P': {
+                    //                }
                     break;
                 case 'N': {
-                    typeEncoding |= XZHTypeEncodingPropertyNonatomic;
+                    _typeEncoding |= XZHTypeEncodingPropertyNonatomic;
                 }
                     break;
-//                case 't': {
-//                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
-//                }
+                    //                case 't': {
+                    //                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
+                    //                }
                     break;
                 case 'R': {
-                    typeEncoding |= XZHTypeEncodingPropertyReadonly;
+                    _typeEncoding |= XZHTypeEncodingPropertyReadonly;
                 }
                     break;
                 case '&': {
-                    typeEncoding |= XZHTypeEncodingPropertyStrong;
+                    _typeEncoding |= XZHTypeEncodingPropertyStrong;
                 }
                     break;
                 case 'w': {
-                    typeEncoding |= XZHTypeEncodingPropertyWeak;
+                    _typeEncoding |= XZHTypeEncodingPropertyWeak;
                 }
                     break;
-
             }
         }
         free(atts);
-        _typeEncoding = typeEncoding;
     }
     
     return self;

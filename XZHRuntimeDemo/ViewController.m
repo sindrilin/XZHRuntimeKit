@@ -897,8 +897,8 @@ Dog *dog = [Dog xzh_modelFromObject:json];
     int count = 100000;
     double date_s = CFAbsoluteTimeGetCurrent();
     for (int i = 0; i < count; i++) {
-//       YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
-        XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+       YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+//        XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
 //        NSLog(@"");
     }
     double date_current = CFAbsoluteTimeGetCurrent() - date_s;
@@ -910,14 +910,14 @@ Dog *dog = [Dog xzh_modelFromObject:json];
     NSData *data = [NSData dataWithContentsOfFile:path];
     NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
     
-   YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
-//    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+//   YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
     
     int count = 100000;
     double date_s = CFAbsoluteTimeGetCurrent();
     for (int i = 0; i < count; i++) {
-//        id json = [model xzh_modelToJSONObject];
-        id json = [model yy_modelToJSONObject];
+//        id json = [model yy_modelToJSONObject];
+        id json = [model xzh_modelToJSONObject];
 //        NSLog(@"");
     }
     double date_current = CFAbsoluteTimeGetCurrent() - date_s;
@@ -1024,8 +1024,8 @@ Dog *dog = [Dog xzh_modelFromObject:json];
 //    [self testJSONMapping2];
 //    [self testJSONMapping3];
 //    [self testJSONMapping4];
-    [self testJSONMapping5];
-//    [self testJSONMapping6];
+//    [self testJSONMapping5];
+    [self testJSONMapping6];
 //    [self testJSONMapping7];
 //    [self testHash];
 //    [self testTypeConvert];

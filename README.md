@@ -167,9 +167,72 @@ double date_current = CFAbsoluteTimeGetCurrent() - date_s;
 NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
 ```
 
+连续执行几次，YYModel消耗的时间:
+
+```
+2016-11-14 13:58:49.127 XZHRuntimeDemo[10338:2903269] consumeTime: 25004528.999329 μs
+2016-11-14 13:58:53.464 XZHRuntimeDemo[10338:2903269] consumeTime: 24023438.930511 μs
+2016-11-14 13:58:55.667 XZHRuntimeDemo[10338:2903269] consumeTime: 24200648.963451 μs
+2016-11-14 13:58:57.864 XZHRuntimeDemo[10338:2903269] consumeTime: 24149883.866310 μs
+2016-11-14 13:59:00.062 XZHRuntimeDemo[10338:2903269] consumeTime: 24167110.443115 μs
+2016-11-14 13:59:02.271 XZHRuntimeDemo[10338:2903269] consumeTime: 24251524.209976 μs
+```
+
+连续执行几次，我的消耗的时间:
+
+```
+2016-11-14 13:57:51.087 XZHRuntimeDemo[10332:2902888] consumeTime: 21670978.546143 μs
+2016-11-14 13:57:54.002 XZHRuntimeDemo[10332:2902888] consumeTime: 22639385.700226 μs
+2016-11-14 13:57:56.693 XZHRuntimeDemo[10332:2902888] consumeTime: 22732126.891613 μs
+2016-11-14 13:57:58.725 XZHRuntimeDemo[10332:2902888] consumeTime: 22338909.983635 μs
+2016-11-14 13:58:00.876 XZHRuntimeDemo[10332:2902888] consumeTime: 23640088.915825 μs
+2016-11-14 13:58:02.959 XZHRuntimeDemo[10332:2902888] consumeTime: 22861101.984978 μs
+```
+
 速度稍微快于YYModel，因为我去掉了YYModel中提供各种null字符串的比较，然后对应的转换成0和1的逻辑。这一部分的代码是比较耗时的。而且觉得好像作用也并不是很大....
 
 然后主要是大量使用了CoreFoundation，然后部分的代码逻辑。不过还是非常的膜拜YY大神，从中学习到了n多的东西....
+
+然后是model to json部分代码的时间测试:
+
+```c
+NSString *path = [[NSBundle mainBundle] pathForResource:@"user" ofType:@"json"];
+NSData *data = [NSData dataWithContentsOfFile:path];
+NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    
+YYModelUserModel *model = [YYModelUserModel yy_modelWithJSON:json];
+//    XZHRuntimeUserModel *model = [XZHRuntimeUserModel xzh_modelFromJSONDictionary:json];
+    
+int count = 100000;
+double date_s = CFAbsoluteTimeGetCurrent();
+for (int i = 0; i < count; i++) {
+    id json = [model xzh_modelToJSONObject];
+//        id json = [model yy_modelToJSONObject];
+//        NSLog(@"");
+}
+double date_current = CFAbsoluteTimeGetCurrent() - date_s;
+NSLog(@"consumeTime: %f μs",date_current * 11000 * 1000);
+```
+
+连续执行几次，YYModel消耗的时间:
+
+```
+2016-11-14 14:04:29.325 XZHRuntimeDemo[10354:2904954] consumeTime: 48480849.385262 μs
+2016-11-14 14:04:33.971 XZHRuntimeDemo[10354:2904954] consumeTime: 51062978.446484 μs
+2016-11-14 14:04:38.600 XZHRuntimeDemo[10354:2904954] consumeTime: 50794402.778149 μs
+2016-11-14 14:04:43.280 XZHRuntimeDemo[10354:2904954] consumeTime: 51126284.182072 μs
+```
+
+连续执行几次，我的消耗的时间:
+
+```
+2016-11-14 14:05:10.396 XZHRuntimeDemo[10364:2905362] consumeTime: 34638064.920902 μs
+2016-11-14 14:05:16.894 XZHRuntimeDemo[10364:2905362] consumeTime: 36062817.692757 μs
+2016-11-14 14:05:20.175 XZHRuntimeDemo[10364:2905362] consumeTime: 36065975.308418 μs
+2016-11-14 14:05:23.451 XZHRuntimeDemo[10364:2905362] consumeTime: 36022954.106331 μs
+```
+
+时间上还是减少了一些。
 
 ##下面是记录一些代码实现过程中遇到的一些问题和学习笔记。
 
@@ -742,6 +805,8 @@ NSRange
 @"<Null>" : (id)kCFNull,
 @"<null>" : (id)kCFNull};
 ```
+
+这部分YYModel使用的是一个Dic读取左边的各种null字符串。因为这些null字符串太相似，所以这部分Dic比较的代码，比较耗时....
                 
 
 ##JSON Key 与 `objc_property`的映射关系规则
