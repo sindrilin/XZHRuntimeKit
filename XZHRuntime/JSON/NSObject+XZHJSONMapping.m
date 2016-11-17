@@ -10,11 +10,6 @@
 #import <objc/message.h>
 #import "XZHRuntime.h"
 
-static BOOL _isNeedDefaultJSONValueHandle = YES;
-void xzh_setNoNeedDefaultJSONValueHandle() {
-    _isNeedDefaultJSONValueHandle = NO;
-}
-
 /**
  *  属性映射jsonkey的类型
  */

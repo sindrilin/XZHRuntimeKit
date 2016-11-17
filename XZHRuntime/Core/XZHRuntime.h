@@ -12,6 +12,12 @@
 
 #define xzh_force_inline __inline__ __attribute__((always_inline))
 
+Class XZHGetNSBlockClass();
+
+typedef id (^XZHWeakRefrenceBlock)(void);
+XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj);
+id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block);
+
 /**
  * 
  ************************************************************************************************
@@ -256,7 +262,7 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
  */
 
 @interface XZHPropertyModel : NSObject
-@property (nonatomic, copy, readonly) NSString *name;//实例变量Ivar名，如：_name
+@property (nonatomic, copy, readonly) NSString *name;//Ivar的名字，eg: _name
 @property (nonatomic, strong) NSArray<NSString *> *protocols;//如: @property (nonatomic, strong) NSArray<协议1,协议2,协议3...> *arr;
 @property (nonatomic, assign, readonly) SEL getter;//如：name
 @property (nonatomic, assign, readonly) SEL setter;//如：setName:
@@ -287,12 +293,11 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 
 @interface XZHMethodModel : NSObject
 @property (nonatomic, assign, readonly) SEL sel;
+@property (nonatomic, assign, readonly) IMP imp;
 @property (nonatomic, copy, readonly) NSString *selString;
 @property (nonatomic, copy, readonly) NSString *returnType;
 @property (nonatomic, copy, readonly) NSArray *argumentTypes;
 @property (nonatomic, copy, readonly) NSString *type;
-@property (nonatomic, assign, readonly) IMP imp;
-
 - (instancetype)initWithMethod:(Method)method;
 - (BOOL)isEqualToMethod:(XZHMethodModel *)method;
 @end
@@ -369,44 +374,17 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 @property (nonatomic, strong, readonly) NSDictionary<NSString*, XZHProtocolModel*> *protocolMap;// 协议名 : ProtocolModel
 
 /**
- *  创建/查询缓存
- *
+ *  创建/查询缓存解析Class >>> ClassModel对象
  *  @param cls          objc_class实例
- *  @param isNeedUpdate 是否需要重新解析Class
  */
 + (instancetype)instanceWithClass:(Class)cls;
-+ (instancetype)instanceWithClassName:(char *)name;
 
 /**
  *  如果是通过runtime函数添加了Property，则找到对应的ClassModel对象调用这个方法
  *  重新解析Class结构
  */
 - (void)setNeedUpdate;
+
 - (BOOL)isNeedUpdate;
+- (BOOL)isEqualToClassModel:(XZHClassModel *)clsModel;
 @end
-
-@interface NSObject (XZHSendMessage)
-
-/**
- *  可以获取返回值的performSelector
- 
-    假设有如下OC函数:
- 
-     @implementation ViewController
-     
-     - (NSString *)haha:(NSString *)arg1 age:(NSInteger)age {
-        return @"hahah";
-     }
-    
-    错误的peformSelector使用方式:
-        NSString *ret = [self xzh_performSelector:@selector(haha:age:) withObjects:@"name", 19]; 参数传入必须使用OC类对象
-        NSString *ret = [self xzh_performSelector:@selector(haha:age:) withObjects:@"name", @19]; 参数必须以nil作为结束
-    
-    正确的peformSelector使用方式:
-        NSString *ret = [self xzh_performSelector:@selector(haha:age:) withObjects:@"name", @19, nil];
- 
- */
-- (id)xzh_performSelector:(SEL)aSelector withObjects:(id)object, ...;
-@end
-
-Class XZHGetNSBlockClass();

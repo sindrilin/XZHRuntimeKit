@@ -9,15 +9,8 @@
 #import <Foundation/Foundation.h>
 
 /**
- *  是否需要使用默认值处理
- *
- *  @return YES会给属性Ivar填充默认值，NO则不会。
- */
-void xzh_setNoNeedDefaultJSONValueHandle();
-
-/**
- *  1) JSON String、JSON Data、JSON Dictionary、Array JSON >>> model、model array
- *  2) model >>> json、json字符串、json data、字典
+ *  1) JSON String、JSON Data、Array JSON、NSDictionary >>> model、model array
+ *  2) model >>> json、json字符串、json data、NSDictionary
  */
 @interface NSObject (XZHJSONModelMapping)
 
@@ -26,7 +19,7 @@ void xzh_setNoNeedDefaultJSONValueHandle();
  *  - (1) @param JSON NSDictioanry
  *  - (2) @param JSON NSString
  *  - (3) @param JSON NSData
- *  - (4) @param JSON Array
+ *  - (4) @param JSON Array 
  *
  *  (2)、(3)、(4) >>>> (1)
  */
@@ -56,14 +49,28 @@ void xzh_setNoNeedDefaultJSONValueHandle();
  */
 @protocol XZHJSONModelMappingRules
 @optional
+
 /**
  *  定制属性名与json key的映射
- *  eg、{属性名 : jsonKey}
+ *  配置字典格式、@{属性名 : jsonKey}
+ *
+ *  支持属性映射jsonkey的类型:
+ *  - (1) 简单的jsonkey或默认不配置的情况 >>> @{@"name" : @"name"}
+ *  - (2) 属性映射另外一个不同的简单的jsonkey >>> @{@"name" : @"user_name"}
+ *  - (3) 属性映射一个json keyPath >>> @{@"name" : @"user.account.name"}
+ *  - (4) 属性映射多个json key，即映射一个json keyArray，情况如下:
+ *      - @{@"name" : @[@"name1", @"name2", @"name3"]}
+ *      - @{@"name" : @[@"name_1", @"user_name", @"u_name"]}
+ *
+ *  支持属性与jsonkey的映射关系:
+ *  - (1) <1 属性 : 1 jsonkey>
+ *  - (2) <1 属性 : n jsonkey>
+ *  - (3) <n 属性 : 1 jsonkey>
  */
 + (NSDictionary *)xzh_customerMappings;
 
 /**
- *  不被映射的json key
+ *  配置忽略被映射的json key
  */
 + (NSArray *)xzh_ignoreMappingJSONKeys;
 

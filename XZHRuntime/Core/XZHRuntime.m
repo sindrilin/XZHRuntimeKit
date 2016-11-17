@@ -11,7 +11,17 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
-char* XZHSubstring(char* ch, size_t pos, size_t length);
+static char* XZHSubstring(char* ch, size_t pos, size_t length) {
+    char* pch=ch;
+    char* subch=(char*)calloc(sizeof(char),length+1);
+    int i;
+    pch=pch+pos;
+    for(i=0;i<length;i++) {
+        subch[i]=*(pch++);
+    }
+    subch[length]='\0';
+    return subch;
+}
 
 /**
  *  支持KVC的c结构体类型
@@ -95,8 +105,8 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     else {return XZHFoundationTypeNone;}
 }
 
-static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
-    if (!obj) {return XZHFoundationTypeNone;}
+//static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
+//    if (!obj) {return XZHFoundationTypeNone;}
 //    还是不能如下这么写死类型，因为可能随着iOS SDK升级这些类名可能会发生变化、以及集成结构也会变化
 //    Class cls = [obj class];
 //    if (cls == objc_getClass("__NSArrayI") || cls == objc_getClass("__NSArray0")) {return XZHFoundationTypeNSArray;}
@@ -117,8 +127,8 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 //    else if (cls == objc_getClass("__NSGlobalBlock__") || cls == objc_getClass("__NSMallocBlock__") || cls == objc_getClass("__NSStackBlock__")) {return XZHFoundationTypeNSBlock;}
 //    else if (obj == (id)kCFNull) {return XZHFoundationTypeNSNull;}
 //    else {return XZHFoundationTypeUnKnown;}//未知、自定义类型
-    return XZHGetClassFoundationType([obj class]);
-}
+//    return XZHGetClassFoundationType([obj class]);
+//}
 
 @implementation XZHIvarModel {
     @package
@@ -146,11 +156,8 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 }
 
 - (BOOL)isEqual:(id)object {
-    if ([self class] == [object class]) {
-        return [self isEqualToIvar:object];
-    } else {
-        return [super isEqual:object];
-    }
+    if ([self class] == [object class]) {return [self isEqualToIvar:object];}
+    else {return [super isEqual:object];}
 }
 
 - (NSUInteger)hash {
@@ -204,6 +211,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                         _isCNumber = NO;
                         _isKVCCompatible = NO;
                     } else {
+                        // len >= 1
                         char *tmpValue = (char *)malloc(sizeof(char) * len);
                         strcpy(tmpValue, att.value);
                         if (len == 1) {
@@ -323,9 +331,10 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                                     break;
                             }
                         } else {
+                            // len > 1
                             switch (tmpValue[0]) {
                                 case '@': {
-                                    if (len == 2 && '?' == tmpValue[1]) {//@?
+                                    if (len == 2 && '?' == tmpValue[1]) {
                                         _typeEncoding |= XZHTypeEncodingFoundationObject;
                                         _foundationType = XZHFoundationTypeNSBlock;
                                         _isCNumber = NO;
@@ -424,15 +433,14 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                 }
                     break;
                 case 'V': {
-                    //name = V,value = Ivar名字
                     if (att.value) {
                         char *head = (char *)att.value;
                         if(!_name) {_name = [NSString stringWithUTF8String:head];}
-                        head++;//去掉Ivar的下划线
-                        if (head) {_getter = NSSelectorFromString(_name);}
-                        char prefix = head[0] - 32;//小写字母转大写字母
                         head++;
-                        NSString *setterStr = ([NSString stringWithFormat:@"set%c%s:", prefix, head]);
+                        if (head) {_getter = NSSelectorFromString(_name);}
+                        char firstChar = head[0] - 32;
+                        head++;
+                        NSString *setterStr = ([NSString stringWithFormat:@"set%c%s:", firstChar, head]);
                         if (setterStr) {_setter = NSSelectorFromString(setterStr);}
                     }
                 }
@@ -445,7 +453,7 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                 case 'G': {
                     _typeEncoding |= XZHTypeEncodingPropertyCustomGetter;
                     if (att.value) {
-                        _getter = sel_registerName(att.value);
+                        _getter = sel_registerName(att.name);
                     }
                 }
                     break;
@@ -460,16 +468,16 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
                     _typeEncoding |= XZHTypeEncodingPropertyDynamic;
                 }
                     break;
-                    //                case 'P': {
-                    //                }
+//                case 'P': {
+//                }
                     break;
                 case 'N': {
                     _typeEncoding |= XZHTypeEncodingPropertyNonatomic;
                 }
                     break;
-                    //                case 't': {
-                    //                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
-                    //                }
+//                case 't': {
+//                    typeEncoding |= XZHTypeEncodingPropertyOldStyleCoding;
+//                }
                     break;
                 case 'R': {
                     _typeEncoding |= XZHTypeEncodingPropertyReadonly;
@@ -487,7 +495,6 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
         }
         free(atts);
     }
-    
     return self;
 }
 
@@ -501,11 +508,8 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 }
 
 - (BOOL)isEqual:(id)object {
-    if ([self class] == [object class]) {
-        return [self isEqualToProperty:object];
-    } else {
-        return [super isEqual:object];
-    }
+    if ([self class] == [object class]) {return [self isEqualToProperty:object];}
+    else {return [super isEqual:object];}
 }
 
 - (NSUInteger)hash {
@@ -590,11 +594,8 @@ static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 }
 
 - (BOOL)isEqual:(id)object {
-    if ([self class] == [object class]) {
-        return [self isEqualToMethod:object];
-    } else {
-        return [super isEqual:object];
-    }
+    if ([self class] == [object class]) {return [self isEqualToMethod:object];}
+    else {return [super isEqual:object];}
 }
 
 - (NSUInteger)hash {
@@ -721,10 +722,6 @@ static dispatch_semaphore_t semaphore = NULL;
     return clsModel;
 }
 
-+ (instancetype)instanceWithClassName:(char *)name {
-    return [self instanceWithClass:objc_getClass(name)];
-}
-
 /**
  *  解析传入的Class
  */
@@ -732,11 +729,13 @@ static dispatch_semaphore_t semaphore = NULL;
     if (self = [super init]) {
         _cls = cls;
         _isMeta = class_isMetaClass(cls);
-        
-        // 解析当前 objc_class >>> ClassModel
         [self _parse];
         
-        // 解析 super_objc_class，但是除去两个根类 1)NSObject 2)NSProxy >>> ClassModel
+        /**
+         *  解析 super_objc_class，但是除去两个根类
+         *  - (1) NSObject 
+         *  - (2) NSProxy
+         */
         _superCls = class_getSuperclass(cls);
         if (!class_isMetaClass(_superCls) && [NSObject class] != _superCls && [NSProxy class] != _superCls ) {
             _superClassModel = [[XZHClassModel alloc] initWithClass:_superCls];
@@ -830,58 +829,34 @@ static dispatch_semaphore_t semaphore = NULL;
     return [self description];
 }
 
-@end
+- (BOOL)isEqual:(id)object {
+    if ([self class] == [object class]) {return [self isEqualToClassModel:object];}
+    else {return [super isEqual:object];}
+}
 
-@implementation NSObject (XZHSendMessage)
-
-//TODO: 还可以使用objc_msgSend()
-//NSString *sel = [NSString stringWithFormat:@"setKey%ldIndex:", (long)(keyArray.count + num)];
-//((void (*)(id, SEL, NSInteger)) (void *) objc_msgSend)(self.featureSelectView, NSSelectorFromString(sel), (fqnums.count-1));
-
-- (id)xzh_performSelector:(SEL)aSelector withObjects:(id)object, ... {
-    NSMethodSignature *signature = [self methodSignatureForSelector:aSelector];
-    if (!signature) {return nil;}
-    
-    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    [invocation setTarget:self];
-    [invocation setSelector:aSelector];
-    
-    NSInteger index = 2;// self、_cmd
-
-    va_list args;
-    va_start(args, object);
-    [invocation setArgument:&object atIndex:index++];
-    
-    id arg = nil;
-    while ((arg = va_arg(args, id))) {
-        [invocation setArgument:&arg atIndex:index++];
-        index++;
-    }
-    
-    va_end(args);
-    
-    [invocation invoke];
-    if (signature.methodReturnLength) {
-        id anObject;
-        [invocation getReturnValue:&anObject];
-        return anObject;
-    }
-    
-    return nil;
+- (BOOL)isEqualToClassModel:(XZHClassModel *)clsModel {
+    if (self == clsModel) {return YES;}
+    if (_isMeta != clsModel.isMeta) {return NO;}
+    if (_superCls != clsModel.superCls) {return NO;}
+    if (_superClassModel != clsModel.superClassModel) {return NO;}
+    if (![_name isEqualToString:clsModel.name]) {return NO;}
+    if (_propertyMap.count != clsModel.propertyMap.count) {return NO;}
+    if (_ivarMap.count != clsModel.ivarMap.count) {return NO;}
+    if (_methodMap.count != clsModel.methodMap.count) {return NO;}
+    if (_protocolMap.count != clsModel.protocolMap.count) {return NO;}
+    return YES;
 }
 
 @end
 
+XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj) {
+    id __weak weakObj = obj;
+    return ^() {
+        id __strong strongObj = weakObj;
+        return strongObj;
+    };
+}
 
-char* XZHSubstring(char* ch, size_t pos, size_t length)
-{
-    char* pch=ch;
-    char* subch=(char*)calloc(sizeof(char),length+1);
-    int i;
-    pch=pch+pos;
-    for(i=0;i<length;i++) {
-        subch[i]=*(pch++);
-    }
-    subch[length]='\0';
-    return subch;
+id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block) {
+    return (nil != block) ? block() : nil;
 }
