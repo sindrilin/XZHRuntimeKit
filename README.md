@@ -4,14 +4,18 @@
 
 主要是将一些常用的基于runtime的代码整合起来:
 
-- (1) JSON 与 Model （结束）
-- (2) Model （正在做ing）
-	- 拷贝
-	- 归档
-- (3) Protocol Notification (没开始)
-- (4) ORM	(没开始)
-- (5) Cache (没开始)
+- (1) JSON 映射 Model （第一版结束）
+	- json to model
+	- model to json
+- (2) Copy （正在做ing）
+	- 浅拷贝
+	- 深拷贝
+- (3) Archive
+- (4) Protocol Observer (没开始)
+- (5) ORM	(没开始)
+- (6) Cache (没开始)
 
+把这些全部整合起来，就算是对自己这两年来搞iOS的交代吧，菜鸟成长记 . . . 
 
 ###JSON 与 Model用法demo
 
