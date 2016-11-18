@@ -847,47 +847,6 @@ PropertyMapper_tip->_title ==> PropertyMapper_name
 
 这样一来，如果有多个不同的属性映射同一个jsonKey（key、keyPath、keyArray）时，通过`PropertyMapper->_next`进行链式串联起来。
 
-##ClassMapper包装一个`objc_class`与json的映射关系时，由于可能多次重复性解析，所以做了内存缓存，并使用semephore完成线程同步
-
-```objc
-+ (instancetype)classMapperWithClass:(Class)cls {
-    if (cls == Nil) return nil;
-    
-    //1. 单利缓存字典、同步信号量 初始化
-    static CFMutableDictionaryRef _cache;
-    static dispatch_semaphore_t _semephore;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        _cache = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        _semephore = dispatch_semaphore_create(1);
-    });
-    
-    //2. 缓存 ClassMapper 的key
-    const void *clsName =  (__bridge const void *)(NSStringFromClass(cls));
-    
-    //3. 先读缓存是否已经存在解析完毕的Mapper对象
-    dispatch_semaphore_wait(_semephore, DISPATCH_TIME_FOREVER);
-    XZHClassMapper *clsMapper = CFDictionaryGetValue(_cache, clsName);
-    dispatch_semaphore_signal(_semephore);
-   
-   //4. 如果缓存没有，再进行解析，并最后将解析的Mapper对象缓存起来
-   if (!clsMapper) {
-   		
-   		//4.1 解析开始，开始多线程同步
-   		dispatch_semaphore_wait(_semephore, DISPATCH_TIME_FOREVER);
-   		
-   		//4.2 完成对 objc_class 的解析
-   		//生成: nethods、ivars、properties、categories、protocols  .... 的对应的model
-   		
-   		//4.3  解析结束，结束多线程同步
-   		dispatch_semaphore_signal(_semephore);
-	}
-	
-	return clsMapper;
-}
-    
-```
-
 ##PropertyMapper、记录OC类对象的属性具体如何映射json中的某一个jsonkey
 
 从逻辑上看:
@@ -1478,46 +1437,35 @@ void test2(__unsafe_unretained UnContext *ctx) {
 
 > `classMapper's property mappded count >= json dic key count` >>>> 此种情况下，应该主要依靠json dic本身的所有的Key进行解析。
 
-- (1) 首先按照json dic.key 找到对应的PropertyMapper来解析json item value
-- (2) 再按照 映射 jsonkeyPath PropertyMapper来解析json item value
-- (3) 再按照 映射 jsonKeyArray PropertyMapper来解析json item value
+- (1) 首先遍历jsondic.key对应的PropertyMapper来解析所有的 json item value，来完成大部分的属性值设置
+- (2) 再按照 映射 jsonkeyPath PropertyMapper来解析对应的 json item value，辅助部分属性值设置
+- (3) 再按照 映射 jsonKeyArray PropertyMapper来解析对应的 json item value，辅助部分属性值设置
 
 (2)和(3)为了可能有一些key是`keyPath`或`keyArray`类型的，那么就可能无法在第一轮进行正常解析，所以需要辅助执行按照`keyPath`或`keyArray`类型进行解析一次。
 
 这样一来，远远比统统按照实体类属性个数进行循环遍历的次数少的多。
 
-> `classMapper's property mappded count < json dic key count` >>>> 此种情况下，可以直接遍历体类所有的属性进行解析。
+> `classMapper's property mappded count < json dic key count` >>>> 此种情况下，可能实体类全部属性都存在对应的jsonvalue，所以直接遍历所有的classMapper's property来解析json
 
 
 ###参考自YYModel的做法，分成如上两种情况
 
 ```objc
-if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
-	
-	//1. 第一步、首先按照json dic 中的所有的单个key进行json解析
-    CFDictionaryApplyFunction((CFDictionaryRef)dic, ModelSetWithDictionaryFunction, &context);
-    
-    //2. 第二步、再特别针对映射keyPath的属性解析
-    if (modelMeta->_keyPathPropertyMetas) {
-        CFArrayApplyFunction((CFArrayRef)modelMeta->_keyPathPropertyMetas,
-                             CFRangeMake(0, CFArrayGetCount((CFArrayRef)modelMeta->_keyPathPropertyMetas)),
-                             ModelSetWithPropertyMetaArrayFunction,
-                             &context);
-    }
-    
-    //3. 第三步、再特别针对映射keyArray的属性解析
-    if (modelMeta->_multiKeysPropertyMetas) {
-        CFArrayApplyFunction((CFArrayRef)modelMeta->_multiKeysPropertyMetas,
-                             CFRangeMake(0, CFArrayGetCount((CFArrayRef)modelMeta->_multiKeysPropertyMetas)),
-                             ModelSetWithPropertyMetaArrayFunction,
-                             &context);
-    }
-} else {
-	// 4. 直接所有的属性映射进行解析
-    CFArrayApplyFunction((CFArrayRef)modelMeta->_allPropertyMetas,
-                         CFRangeMake(0, modelMeta->_keyMappedCount),
-                         ModelSetWithPropertyMetaArrayFunction,
-                         &context);
+if (jsonDic.count <= clsMapper->_totalMappedCount) {
+        /**
+         *  此种情况下，实体类中的一部分属性，可能不存在对应的jsonvalue
+         *  - (1) 首先遍历jsondic.key对应的PropertyMapper来解析所有的 json item value，来完成大部分的属性值设置
+         *  - (2) 再按照 映射 jsonkeyPath PropertyMapper来解析对应的 json item value，辅助部分属性值设置
+         *  - (3) 再按照 映射 jsonKeyArray PropertyMapper来解析对应的 json item value，辅助部分属性值设置
+         */
+        CFDictionaryApplyFunction((CFDictionaryRef)jsonDic, XZHJsonToModelApplierFunctionWithJSONDict, &ctx);
+        if(clsMapper->_keyPathMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyPathPropertyMappers, CFRangeMake(0, clsMapper->_keyPathMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
+        if(clsMapper->_keyArrayMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyArrayPropertyMappers, CFRangeMake(0, clsMapper->_keyArrayMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
+    } else {
+        /**
+         *  此种情况下，可能实体类全部属性都存在对应的jsonvalue，所以直接遍历所有的classMapper's property来解析json
+         */
+        CFArrayApplyFunction(clsMapper->_allPropertyMappers, CFRangeMake(0, clsMapper->_totalMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);
 }
 ```
 

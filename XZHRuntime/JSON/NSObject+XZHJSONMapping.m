@@ -30,24 +30,21 @@ typedef NS_ENUM(NSInteger, XZHPropertyMappedToJsonKeyType) {
 
 @class XZHPropertyMapper;
 
-/**
- *  没存要解析的jsonDic、实体类的ClassMapper、实体类的一个对象
- */
-typedef struct XZHModelContext {
-    void *model;
-    void *classMapper;
-    void *jsonDic;
-}XZHModelContext;
+typedef struct XZHJsonToModelContext {
+    void *model;            // 实体类的一个对象
+    void *classMapper;      // 实体类的ClassMapper
+    void *jsonDic;          // 要解析的jsonDic
+}XZHJsonToModelContext;
+
+typedef struct XZHModelToJsonContext {
+    void *model;            // 从哪一个对象转成json对象
+    void *objectDic;        // 最终转换成的json对象
+}XZHModelToJsonContext;
 
 /**
  *  日期字符串格式化
  */
 static xzh_force_inline NSDateFormatter* XZHDateFormatter(__unsafe_unretained NSString *dateFormat);
-
-/**
- *  单独对NSString对象做各种null字符串的处理，均转换为@""
- */
-static xzh_force_inline NSString* XZHConvertNullNSString(__unsafe_unretained id value);
 
 /**
  *  json字符串转换成NSDictioanry
@@ -631,24 +628,25 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
 
     id model = [[self alloc] init];
     if (!model) {return nil;}
-    XZHModelContext ctx = {0};
+    
+    XZHJsonToModelContext ctx = {0};
     ctx.model       = (__bridge void*)(model);
     ctx.jsonDic     = (__bridge void *)(jsonDic);
     ctx.classMapper = (__bridge void *)(clsMapper);
     
     if (jsonDic.count <= clsMapper->_totalMappedCount) {
         /**
-         *  此种情况下，不需要遍历所有的classMapper's property来解析json，因为可能有一些实体类属性对于的jsonvalue不存在
-         *  - (1) 首先按照json dic.key 找到对应的PropertyMapper来解析json item value
-         *  - (2) 再按照 映射 jsonkeyPath PropertyMapper来解析json item value
-         *  - (3) 再按照 映射 jsonKeyArray PropertyMapper来解析json item value
+         *  此种情况下，实体类中的一部分属性，可能不存在对应的jsonvalue
+         *  - (1) 首先遍历jsondic.key对应的PropertyMapper来解析所有的 json item value，来完成大部分的属性值设置
+         *  - (2) 再按照 映射 jsonkeyPath PropertyMapper来解析对应的 json item value，辅助部分属性值设置
+         *  - (3) 再按照 映射 jsonKeyArray PropertyMapper来解析对应的 json item value，辅助部分属性值设置
          */
         CFDictionaryApplyFunction((CFDictionaryRef)jsonDic, XZHJsonToModelApplierFunctionWithJSONDict, &ctx);
         if(clsMapper->_keyPathMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyPathPropertyMappers, CFRangeMake(0, clsMapper->_keyPathMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
         if(clsMapper->_keyArrayMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyArrayPropertyMappers, CFRangeMake(0, clsMapper->_keyArrayMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
     } else {
         /**
-         *  此种情况下，直接遍历所有的classMapper's property来解析json
+         *  此种情况下，可能实体类全部属性都存在对应的jsonvalue，所以直接遍历所有的classMapper's property来解析json
          */
         CFArrayApplyFunction(clsMapper->_allPropertyMappers, CFRangeMake(0, clsMapper->_totalMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);
     }
@@ -1341,11 +1339,6 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
     }
 }
 
-typedef struct XZHConvertModelToJSONContext {
-    void *model;//从哪个objc对象取属性值
-    void *objectDic;//取到的属性值经过json化处理之后，设置到哪一个dic对象
-}XZHConvertModelToJSONContext;
-
 static void XZHSetDictioanryWithKeyPath(__unsafe_unretained NSArray *keypathArray, __unsafe_unretained NSMutableDictionary *desDic, __unsafe_unretained id value) {
     NSMutableDictionary *superDic = desDic;
     NSMutableDictionary *subDic = nil;
@@ -1376,7 +1369,7 @@ static void XZHSetDictioanryWithKeyPath(__unsafe_unretained NSArray *keypathArra
 static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const void *propertyMapper, void *context) {
     if (!mappedToKey || !propertyMapper) return;
     XZHPropertyMapper *_propertyMapper = (__bridge XZHPropertyMapper *)(propertyMapper);
-    XZHConvertModelToJSONContext *ctx = (XZHConvertModelToJSONContext *)context;
+    XZHModelToJsonContext *ctx = (XZHModelToJsonContext *)context;
     __unsafe_unretained id object = (__bridge id)(ctx->model);
     if (!object || (id)kCFNull == object) return;
     __unsafe_unretained NSMutableDictionary *objectDic = (__bridge NSMutableDictionary*)(ctx->objectDic);
@@ -1499,7 +1492,7 @@ static id XZHConvertModelToAbleJSONSerialization(__unsafe_unretained id object) 
     __unsafe_unretained XZHClassMapper *classMapper = [XZHClassMapper classMapperWithClass:[object class]];
     if (!classMapper || (0 == classMapper->_totalMappedCount)) {return nil;}
     NSMutableDictionary *objectDic = [[NSMutableDictionary alloc] initWithCapacity:64];
-    XZHConvertModelToJSONContext ctx = {0};
+    XZHModelToJsonContext ctx = {0};
     ctx.model = (__bridge void*)object;
     ctx.objectDic = (__bridge void*)objectDic;
     CFDictionaryApplyFunction(classMapper->_jsonKeyPropertyMapperDic, XZHConvertModelToJSONApplierFunction, &ctx);
@@ -1514,7 +1507,7 @@ static void XZHJsonToModelApplierFunctionWithJSONDict(const void *jsonKey, const
      *  因为jsonDic、classMapper、propertyMapper、model都是由Context结构体实例持有
      *  所以不必担心jsonDic、classMapper、propertyMapper、model 这些对象会被废弃的问题
      */
-    XZHModelContext *ctx = (XZHModelContext *)context;
+    XZHJsonToModelContext *ctx = (XZHJsonToModelContext *)context;
     __unsafe_unretained id model = (__bridge id)(ctx->model);
     if (!model) {return;}
     
@@ -1538,7 +1531,7 @@ static void XZHJsonToModelApplierFunctionWithJSONDict(const void *jsonKey, const
 
 static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, void *context) {
     if (NULL == value || NULL == context) {return;}
-    XZHModelContext *ctx = (XZHModelContext *)context;
+    XZHJsonToModelContext *ctx = (XZHJsonToModelContext *)context;
     __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);
     if (!jsonDic || ![jsonDic isKindOfClass:[NSDictionary class]]) return;
 
