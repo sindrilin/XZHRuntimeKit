@@ -26,34 +26,34 @@ static char* XZHSubstring(char* ch, size_t pos, size_t length) {
 /**
  *  支持KVC的c结构体类型
  */
-static BOOL XZHIsCStructKVCCompatible(const char *typeEncoding) {
-    NSString *type = [NSString stringWithUTF8String:typeEncoding];
-    if (!type) return NO;
-    static NSSet *types = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSMutableSet *set = [NSMutableSet new];
-        // 32 bit
-        [set addObject:@"{CGSize=ff}"];
-        [set addObject:@"{CGPoint=ff}"];
-        [set addObject:@"{CGRect={CGPoint=ff}{CGSize=ff}}"];
-        [set addObject:@"{CGAffineTransform=ffffff}"];
-        [set addObject:@"{UIEdgeInsets=ffff}"];
-        [set addObject:@"{UIOffset=ff}"];
-        // 64 bit
-        [set addObject:@"{CGSize=dd}"];
-        [set addObject:@"{CGPoint=dd}"];
-        [set addObject:@"{CGRect={CGPoint=dd}{CGSize=dd}}"];
-        [set addObject:@"{CGAffineTransform=dddddd}"];
-        [set addObject:@"{UIEdgeInsets=dddd}"];
-        [set addObject:@"{UIOffset=dd}"];
-        types = set;
-    });
-    if ([types containsObject:type]) {
-        return YES;
-    }
-    return NO;
-}
+//static BOOL XZHIsCStructKVCCompatible(const char *typeEncoding) {
+//    NSString *type = [NSString stringWithUTF8String:typeEncoding];
+//    if (!type) return NO;
+//    static NSSet *types = nil;
+//    static dispatch_once_t onceToken;
+//    dispatch_once(&onceToken, ^{
+//        NSMutableSet *set = [NSMutableSet new];
+//        // 32 bit
+//        [set addObject:@"{CGSize=ff}"];
+//        [set addObject:@"{CGPoint=ff}"];
+//        [set addObject:@"{CGRect={CGPoint=ff}{CGSize=ff}}"];
+//        [set addObject:@"{CGAffineTransform=ffffff}"];
+//        [set addObject:@"{UIEdgeInsets=ffff}"];
+//        [set addObject:@"{UIOffset=ff}"];
+//        // 64 bit
+//        [set addObject:@"{CGSize=dd}"];
+//        [set addObject:@"{CGPoint=dd}"];
+//        [set addObject:@"{CGRect={CGPoint=dd}{CGSize=dd}}"];
+//        [set addObject:@"{CGAffineTransform=dddddd}"];
+//        [set addObject:@"{UIEdgeInsets=dddd}"];
+//        [set addObject:@"{UIOffset=dd}"];
+//        types = set;
+//    });
+//    if ([types containsObject:type]) {
+//        return YES;
+//    }
+//    return NO;
+//}
 
 /**
  *  因为Foundation并没有给出NSBlock这个类，所以只能通过Block实例不断向父类查询类型
@@ -180,9 +180,8 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 
 - (instancetype)initWithProperty:(objc_property_t)property {
     if (!property) {return nil;}
-    if (self = [super init]) {
+    if (self = [super init]) {//start init
         _property = property;
-        
         const char *c_name = property_getName(property);
         if (NULL != c_name) {_name = [NSString stringWithUTF8String:c_name];}
         
@@ -209,7 +208,6 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                     if (len < 1) {
                         _foundationType = XZHFoundationTypeNone;
                         _isCNumber = NO;
-                        _isKVCCompatible = NO;
                     } else {
                         // len >= 1
                         char *tmpValue = (char *)malloc(sizeof(char) * len);
@@ -217,115 +215,96 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                         if (len == 1) {
                             switch (tmpValue[0]) {
                                 case '?': {
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case 'c': {//char
                                     _typeEncoding |= XZHTypeEncodingChar;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'i': {//int
                                     _typeEncoding |= XZHTypeEncodingInt;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 's': {//short
                                     _typeEncoding |= XZHTypeEncodingShort;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'l': {//long
                                     _typeEncoding |= XZHTypeEncodingLong32;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'q': {//long long
                                     _typeEncoding |= XZHTypeEncodingLongLong;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'C': {//unsigned char
                                     _typeEncoding |= XZHTypeEncodingUnsignedChar;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'I': {//unsigned int
                                     _typeEncoding |= XZHTypeEncodingUnsignedInt;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'S': {//unsigned short
                                     _typeEncoding |= XZHTypeEncodingUnsignedShort;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'L': {//unsigned long
                                     _typeEncoding |= XZHTypeEncodingUnsignedLong;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'Q': {//unsigned long long
                                     _typeEncoding |= XZHTypeEncodingUnsignedLongLong;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'f': {//float
                                     _typeEncoding |= XZHTypeEncodingFloat;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'd': {//double
                                     _typeEncoding |= XZHTypeEncodingDouble;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'D': {//long double
                                     _typeEncoding |= XZHTypeEncodingLongDouble;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'B': {//A C++ bool or a C99 _Bool
                                     _typeEncoding |= XZHTypeEncodingBOOL;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = YES;
                                 }
                                     break;
                                 case 'v': {//void
                                     _typeEncoding |= XZHTypeEncodingVoid;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case '*': {//char *
                                     _typeEncoding |= XZHTypeEncodingCString;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case '#': {//Class
                                     _typeEncoding |= XZHTypeEncodingObjcClass;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case ':': {//SEL
                                     _typeEncoding |= XZHTypeEncodingSEL;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
@@ -338,7 +317,6 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                                         _typeEncoding |= XZHTypeEncodingFoundationObject;
                                         _foundationType = XZHFoundationTypeNSBlock;
                                         _isCNumber = NO;
-                                        _isKVCCompatible = YES;
                                     } else {
                                         size_t *startArr = malloc(sizeof(size_t) * len/2.0);
                                         size_t *endArr = malloc(sizeof(size_t) * len/2.0);
@@ -389,7 +367,6 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                                         _typeEncoding |= XZHTypeEncodingFoundationObject;
                                         _foundationType = XZHGetClassFoundationType(_cls);
                                         _isCNumber = NO;
-                                        _isKVCCompatible = YES;
                                         free(clsName);clsName = NULL;
                                         free(startArr);startArr = NULL;
                                         free(endArr);endArr = NULL;
@@ -398,31 +375,26 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                                     break;
                                 case '[': {//char[6] >>> [array type]
                                     _typeEncoding |= XZHTypeEncodingCArray;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case '{': {//struct >>> {Node=i^{Node}Bc}
                                     _typeEncoding |= XZHTypeEncodingCStruct;
-                                    _isKVCCompatible = XZHIsCStructKVCCompatible(tmpValue);
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case '(': {//union
                                     _typeEncoding |= XZHTypeEncodingCUnion;
-                                    _isKVCCompatible = YES;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case 'b': {//bit field 不使用
                                     _typeEncoding |= XZHTypeEncodingCBitFields;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
                                 case '^': {//c 指针变量
                                     _typeEncoding |= XZHTypeEncodingCPointer;
-                                    _isKVCCompatible = NO;
                                     _isCNumber = NO;
                                 }
                                     break;
@@ -494,7 +466,11 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
             }
         }
         free(atts);
-    }
+        
+        if (_getter) {_isGetterAccess = YES;}
+        if (_setter && ((XZHTypeEncodingPropertyReadonly != (_typeEncoding & XZHTypeEncodingDataTypeMask)))) {_isSetterAccess = YES;}
+        else {_isSetterAccess = NO;}
+    }//end init
     return self;
 }
 
@@ -665,11 +641,15 @@ static dispatch_semaphore_t semaphore = NULL;
 }
 
 + (instancetype)instanceWithClass:(Class)cls {
+    
     /**
-     *  使用缓存来避免重复性解析Class、信号量同步多线程读取缓存
+     *  类本身的解析缓存
      */
-    static CFMutableDictionaryRef classCache;//类本身的解析缓存
-    static CFMutableDictionaryRef metaClsCache;//元类的解析缓存
+    static CFMutableDictionaryRef classCache;
+    /**
+     *  元类的解析缓存
+     */
+    static CFMutableDictionaryRef metaClsCache;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         classCache = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0,  &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -859,4 +839,15 @@ XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj) {
 
 id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block) {
     return (nil != block) ? block() : nil;
+}
+
+BOOL XZHClassRespondsToSelector(Class cls, SEL sel) {
+    /**
+     *  只判断类方法是否实现
+     */
+    Class meta = object_getClass(cls);
+    if (class_isMetaClass(meta)) {
+        return class_respondsToSelector(meta, sel);
+    }
+    return NO;
 }

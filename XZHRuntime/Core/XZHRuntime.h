@@ -18,6 +18,8 @@ typedef id (^XZHWeakRefrenceBlock)(void);
 XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj);
 id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block);
 
+BOOL XZHClassRespondsToSelector(Class cls, SEL sel);
+
 /**
  * 
  ************************************************************************************************
@@ -199,6 +201,7 @@ typedef NS_ENUM(NSInteger, XZHTypeEncoding) {
 
 /**
  *  Objective-C Foundation 对象类型，参考Foundation.h中常用的类型
+ *  对上面XZHTypeEncodingFoundationObject这个枚举值的分类细化
  */
 typedef NS_ENUM(NSInteger, XZHFoundationType) {
     XZHFoundationTypeNone   = 0,
@@ -218,13 +221,13 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
     XZHFoundationTypeNSMutableData,
     XZHFoundationTypeNSValue,
     XZHFoundationTypeNSNull,
-    XZHFoundationTypeNSBlock,//Foundation中没有直接暴露NSBlock这个Class，需要使用代码进行获取
+    XZHFoundationTypeNSBlock,
     XZHFoundationTypeCustomer,//自定义的NSObject子类
 };
 
 @class XZHClassModel;
 
-/*
+/**
     struct objc_ivar {
         char *ivar_name                                          OBJC2_UNAVAILABLE;
         char *ivar_type                                          OBJC2_UNAVAILABLE;
@@ -271,14 +274,14 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 @property (nonatomic, assign, readonly) Class cls;//Ivar的类型
 @property (nonatomic, copy, readonly) NSString *encodingString;//name=T,value=@NSArray、{CGSize=ff}...
 @property (nonatomic, assign, readonly) BOOL isCNumber;// Ivar是否是c基本数值类型
-@property (nonatomic, assign, readonly) BOOL isCanArchived;// Ivar类型是否支持归档
-@property (nonatomic, assign, readonly) BOOL isKVCCompatible;// Ivar值是否能够使用KVC
+@property (nonatomic, assign, readonly) BOOL isGetterAccess;
+@property (nonatomic, assign, readonly) BOOL isSetterAccess;
 
 - (instancetype)initWithProperty:(objc_property_t)property;
 - (BOOL)isEqualToProperty:(XZHPropertyModel *)property;
 @end
 
-/*
+/**
     struct objc_method {
         SEL method_name                                          OBJC2_UNAVAILABLE;
         char *method_types                                       OBJC2_UNAVAILABLE;
@@ -327,7 +330,7 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 - (NSArray *)methodsRequired:(BOOL)isRequiredMethod instance:(BOOL)isInstanceMethod;
 @end
 
-/*
+/**
     struct objc_category {
         char *category_name                                      OBJC2_UNAVAILABLE;
         char *class_name                                         OBJC2_UNAVAILABLE;
@@ -345,7 +348,7 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 @property (nonatomic, strong, readonly) NSArray<XZHProtocolModel*> *protocol_list;
 @end
 
-/*
+/**
     struct objc_class {
         Class isa;
     #if !__OBJC2__

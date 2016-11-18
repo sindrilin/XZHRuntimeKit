@@ -8,10 +8,6 @@
 
 #import <Foundation/Foundation.h>
 
-/**
- *  1) JSON String、JSON Data、Array JSON、NSDictionary >>> model、model array
- *  2) model >>> json、json字符串、json data、NSDictionary
- */
 @interface NSObject (XZHJSONModelMapping)
 
 /**
@@ -19,9 +15,7 @@
  *  - (1) @param JSON NSDictioanry
  *  - (2) @param JSON NSString
  *  - (3) @param JSON NSData
- *  - (4) @param JSON Array 
- *
- *  (2)、(3)、(4) >>>> (1)
+ *  - (4) @param JSON Array
  */
 
 + (instancetype)xzh_modelFromObject:(id)obj;
@@ -34,8 +28,6 @@
  *  - (1) @return NSDictionary、NSArray
  *  - (2) @return NSData
  *  - (3) @return NSString
- *
- *  (3) >>> (2) >>> (1)
  */
 
 - (instancetype)xzh_modelToJSONObject;
@@ -66,6 +58,8 @@
  *  - (1) <1 属性 : 1 jsonkey>
  *  - (2) <1 属性 : n jsonkey>
  *  - (3) <n 属性 : 1 jsonkey>
+ *
+ *  注意: key值只支持NSString类型来表示属性名
  */
 + (NSDictionary *)xzh_customerMappings;
 
@@ -75,16 +69,18 @@
 + (NSArray *)xzh_ignoreMappingJSONKeys;
 
 /**
- *  指定对应的dictionary映射某个类型class
- */
-+ (Class)xzh_classForDictionary:(NSDictionary *)dic;
-
-/**
  *  返回数组元素中对象的类型
  *  eg1、@{@"属性名" : @"Dog"}
  *  eg2、@{@"属性名" : Dog.class}
+ *
+ *  注意: key值只支持NSString类型来表示属性名
  */
 + (NSDictionary *)xzh_classInArray;
+
+/**
+ *  指定对应的dictionary映射某个类型class
+ */
++ (Class)xzh_classForDictionary:(NSDictionary *)dic;
 
 /**
  *  返回解析日期字符串的格式
@@ -92,4 +88,3 @@
 + (NSString *)xzh_dateFormat;
 
 @end
-

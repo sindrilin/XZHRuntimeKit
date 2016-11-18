@@ -692,7 +692,7 @@ Property Model 包含:
 	- struct 
 ```
 
-##NSNumber包裹的数据类型
+##可以与NSNumber互转的数据类型
 
 基本数值类型
 
@@ -716,19 +716,10 @@ unsigned short
 
 NSString类型
 
-```
-NSString*
-NSMutableString*
-```
+- (1) 简单的数值字符串
+- (2) 日期字符串
 
-##NSValue包裹的数据类型
-
-```
-NSPoint
-NSRect
-NSSize
-NSRange
-```
+NSDate日期
 
 ##JSON Key 与 `objc_property`的映射关系规则
 
@@ -784,32 +775,19 @@ name3 >>> name
 - (3) 多个属性同时映射一个`json KeyArray`
 
 
-###不存在多个属性映射同一个json key
+###多个不同属性映射同一个json key
 
 ```
-<属性 : json key>
-1. {name : name}
-2. {name : user_name}
-3. {name : user.name}
-4. {name : [name1, name2, name3, user.name]}
-```
+eg1.
+	{name1 : name}, {name2 : name}, {name3 : name}
 
-- (1) 1、2 可以归结为一种 `mappedTosimpleKey:(NSString *)`
-- (2) 3 归结为 `mappedTokeyPath:(NSString *)`
-- (3) 4 鬼结构 `mappedTokeyArray:(NSArray *)`
-
-所以说对于`PropertyMapper`对象用来描述一个`objc_property`y与`json value item`之间的关系，应该要记录如上三个数据项。
-
-###存在多个属性映射同一个json key
-
-```
-5. {name1 : name}, {name2 : name}, {name3 : name}
-
-6. {name1 : user.name},
+eg2. 
+	{name1 : user.name},
    {name2 : user.name},
    {name3 : user.name}
 
-7. {name1 : @[@"name", @"user.name", @"user_name"]}, 
+eg3.
+	{name1 : @[@"name", @"user.name", @"user_name"]}, 
    {name2 : @[@"name", @"user.name", @"user_name"]}, 
    {name3 : @[@"name", @"user.name", @"user_name"]}
 ```
@@ -843,17 +821,17 @@ dic = {
 但是`PropertyMapper_tip`依次讲前面的两个串联起来
 
 ```
-PropertyMapper_tip->_next == PropertyMapper_title
+PropertyMapper_tip->_next ==> PropertyMapper_title
 ```
 
 ```
-PropertyMapper_tip->_title == PropertyMapper_name
+PropertyMapper_tip->_title ==> PropertyMapper_name
 ```
 
 还有一种是上面情况的扩展，即不同属性映射的jsonKey此时不是一个简单的key，而是`多个key`
 
 ```
-//{属性 : json key 数组}
+//{属性 : [key1, key2, key3, ....., keyN]}
 
 @{
 	....
@@ -868,45 +846,6 @@ PropertyMapper_tip->_title == PropertyMapper_name
 ![](http://i1.piimg.com/ee87eb2dff87aff8.png)
 
 这样一来，如果有多个不同的属性映射同一个jsonKey（key、keyPath、keyArray）时，通过`PropertyMapper->_next`进行链式串联起来。
-
-##json key、`objc_property`、property model、property mapper 之间的关系
-
-
-
-```
-property mapper
-	- property model
-		- objc_property
-	- 记录 property model 如何 映射 json key
-		- {name : name}		
-		- {name : user_name}
-		- {name : user.name}
-		- {name : [name1, name2, name3, user.name]}
-		- {name1 : name}, {name2 : name}, {name3 : name}
-```
-
-##ClassMapper 描述 一个json 与 一个model之间所有的jsonkey与property具体如何映射，也就是管理所有的PropertyMapper
-
-个人分析对于一个json与model之间映射的关系结构:
-
-```
-ClassMapper:
-	- default（没有自定义映射关系）
-		- simple json key
-			- 1 属性 : 1 json key
-			- n 属性 : 1 json key
-	- customer（自定义映射关系）
-		- simple json key
-			- 1 属性 : 1 json key
-			- n 属性 : 1 json key
-		- json keyPath
-			- 1 属性 : 1 json key
-			- n 属性 : 1 json key
-		- json key array
-			- 1 属性 : 1 json key
-			- n 属性 : 1 json key
-			- 1 属性 : n json key
-```
 
 ##ClassMapper包装一个`objc_class`与json的映射关系时，由于可能多次重复性解析，所以做了内存缓存，并使用semephore完成线程同步
 
@@ -949,7 +888,34 @@ ClassMapper:
     
 ```
 
-##PropertyMapper
+##PropertyMapper、记录OC类对象的属性具体如何映射json中的某一个jsonkey
+
+从逻辑上看:
+
+```
+PropertyMapper
+	- jsonkey
+		- simple key
+		- keyPath
+		- keyArray
+	- property
+		- <1property : 1jsonkey>
+		- <1property : njsonkey>
+		- <nproperty : 1jsonkey>
+```
+
+比如说管理如下的映射关系:
+
+```
+// 属性 : jsonKey
+- {name : name}		
+- {name : user_name}
+- {name : user.name}
+- {name : [name1, name2, name3, user.name]}
+- {name1 : name}, {name2 : name}, {name3 : name}
+```
+
+从代码结构上看:
 
 - (1) 三个重要的Class实例变量
 
