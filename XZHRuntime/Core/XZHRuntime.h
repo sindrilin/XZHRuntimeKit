@@ -123,7 +123,7 @@ typedef NS_ENUM(NSInteger, XZHTypeEncoding) {
     // c语法据类型编码
     XZHTypeEncodingVoid                                                 = 16,//V >>> A void return value type
     XZHTypeEncodingCString                                              = 17,//* >>> A character string (char *)
-    XZHTypeEncodingObjcClass                                            = 18,//# >>> A struct objc_class instance
+    XZHTypeEncodingClass                                                = 18,//# >>> A struct objc_class instance
     XZHTypeEncodingSEL                                                  = 19,//: >>> A struct objc_selector instance
     XZHTypeEncodingCArray                                               = 20,//@encode(int[5]) >>> [5i] >>> [长度, 数组元素类型编码]
     XZHTypeEncodingCStruct                                              = 21,//@encode(CGPint) >>> {CGPoint=dd} >>> d是double >>> 两个double变量
@@ -272,7 +272,8 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 @property (nonatomic, assign, readonly) XZHTypeEncoding typeEncoding;
 @property (nonatomic, assign, readonly) XZHFoundationType foundationType;
 @property (nonatomic, assign, readonly) Class cls;//Ivar的类型
-@property (nonatomic, copy, readonly) NSString *encodingString;//name=T,value=@NSArray、{CGSize=ff}...
+@property (nonatomic, copy, readonly) NSString *fullEncodingString;//eg、"Tq,N,V_price"、T@"NSString",C,N,V_name 属性的整串编码字符串
+@property (nonatomic, copy, readonly) NSString *ivarEncodingString;//Ivar编码字符串
 @property (nonatomic, assign, readonly) BOOL isCNumber;// Ivar是否是c基本数值类型
 @property (nonatomic, assign, readonly) BOOL isGetterAccess;
 @property (nonatomic, assign, readonly) BOOL isSetterAccess;

@@ -76,38 +76,32 @@ Class XZHGetNSBlockClass() {
     return NSBlock;
 }
 
-/**
- *  判断一个 objc class 的foundation type
- *  Foundation类基本上都是`类簇类`，我们使用的类并非是真正的类型
- *  真正的私有类型是如上注释的代码中的类型
- *  但是所有的私有内部类都是`继承自类簇类`，也就是`类簇类的子类`
- */
 static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     if (NULL == cls) {return XZHFoundationTypeNone;}
-    if ([cls isSubclassOfClass:[NSArray class]]) {return XZHFoundationTypeNSArray;}
+    if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
+    else if ([cls isSubclassOfClass:[NSMutableString class]]) {return XZHFoundationTypeNSMutableString;}
+    else if ([cls isSubclassOfClass:[NSString class]]) {return XZHFoundationTypeNSString;}
+    else if ([cls isSubclassOfClass:[NSDecimalNumber class]]) {return XZHFoundationTypeNSDecimalNumber;}
+    else if ([cls isSubclassOfClass:[NSNumber class]]) {return XZHFoundationTypeNSNumber;}
     else if ([cls isSubclassOfClass:[NSURL class]]) {return XZHFoundationTypeNSURL;}
     else if ([cls isSubclassOfClass:[NSMutableArray class]]) {return XZHFoundationTypeNSMutableArray;}
-    else if ([cls isSubclassOfClass:[NSSet class]]) {return XZHFoundationTypeNSSet;}
-    else if ([cls isSubclassOfClass:[NSMutableSet class]]) {return XZHFoundationTypeNSMutableSet;}
-    else if ([cls isSubclassOfClass:[NSDictionary class]]) {return XZHFoundationTypeNSMutableArray;}
+    else if ([cls isSubclassOfClass:[NSArray class]]) {return XZHFoundationTypeNSArray;}
     else if ([cls isSubclassOfClass:[NSMutableDictionary class]]) {return XZHFoundationTypeNSMutableDictionary;}
+    else if ([cls isSubclassOfClass:[NSDictionary class]]) {return XZHFoundationTypeNSMutableArray;}
+    else if ([cls isSubclassOfClass:[NSMutableSet class]]) {return XZHFoundationTypeNSMutableSet;}
+    else if ([cls isSubclassOfClass:[NSSet class]]) {return XZHFoundationTypeNSSet;}
     else if ([cls isSubclassOfClass:[NSDate class]]) {return XZHFoundationTypeNSDate;}
-    else if ([cls isSubclassOfClass:[NSData class]]) {return XZHFoundationTypeNSData;}
     else if ([cls isSubclassOfClass:[NSMutableData class]]) {return XZHFoundationTypeNSMutableData;}
-    else if ([cls isSubclassOfClass:[NSNumber class]]) {return XZHFoundationTypeNSNumber;}
-    else if ([cls isSubclassOfClass:[NSDecimalNumber class]]) {return XZHFoundationTypeNSDecimalNumber;}
-    else if ([cls isSubclassOfClass:[NSString class]]) {return XZHFoundationTypeNSString;}
-    else if ([cls isSubclassOfClass:[NSMutableString class]]) {return XZHFoundationTypeNSMutableString;}
+    else if ([cls isSubclassOfClass:[NSData class]]) {return XZHFoundationTypeNSData;}
     else if ([cls isSubclassOfClass:[NSValue class]]) {return XZHFoundationTypeNSValue;}
-    else if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
     else if ([cls isSubclassOfClass:XZHGetNSBlockClass()]) {return XZHFoundationTypeNSBlock;}
-    else if ([cls isSubclassOfClass:[NSObject class]]) {return XZHFoundationTypeCustomer;}//last
+    else if ([cls isSubclassOfClass:[NSObject class]]) {return XZHFoundationTypeCustomer;}//last case
     else {return XZHFoundationTypeNone;}
 }
 
+// 举得还是不能如下这么写死类型，因为可能随着iOS SDK升级这些类名可能会发生变化、以及集成结构也会变化。
 //static xzh_force_inline XZHFoundationType XZHGetObjectFoundationType(id obj) {
 //    if (!obj) {return XZHFoundationTypeNone;}
-//    还是不能如下这么写死类型，因为可能随着iOS SDK升级这些类名可能会发生变化、以及集成结构也会变化
 //    Class cls = [obj class];
 //    if (cls == objc_getClass("__NSArrayI") || cls == objc_getClass("__NSArray0")) {return XZHFoundationTypeNSArray;}
 //    else if (cls == objc_getClass("__NSArrayM")) {return XZHFoundationTypeNSMutableArray;}
@@ -187,7 +181,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
         
         //eg、"Tq,N,V_price"、T@"NSString",C,N,V_name 属性的整串编码字符串
         const char *c_attributes = property_getAttributes(property);
-        if (NULL != c_attributes) {_encodingString = [NSString stringWithUTF8String:c_attributes];}
+        if (NULL != c_attributes) {_fullEncodingString = [NSString stringWithUTF8String:c_attributes];}
         
         /**
          *  获取一个@property属性的所有的objc_property_attribute_t实例
@@ -204,6 +198,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
             objc_property_attribute_t att = atts[i];
             switch (att.name[0]) {
                 case 'T': {
+                    _ivarEncodingString = [NSString stringWithUTF8String:att.value];
                     size_t len = strlen(att.value);
                     if (len < 1) {
                         _foundationType = XZHFoundationTypeNone;
@@ -213,6 +208,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                         char *tmpValue = (char *)malloc(sizeof(char) * len);
                         strcpy(tmpValue, att.value);
                         if (len == 1) {
+                            _foundationType = XZHFoundationTypeNone;
                             switch (tmpValue[0]) {
                                 case '?': {
                                     _isCNumber = NO;
@@ -299,7 +295,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                                 }
                                     break;
                                 case '#': {//Class
-                                    _typeEncoding |= XZHTypeEncodingObjcClass;
+                                    _typeEncoding |= XZHTypeEncodingClass;
                                     _isCNumber = NO;
                                 }
                                     break;
@@ -468,7 +464,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
         free(atts);
         
         if (_getter) {_isGetterAccess = YES;}
-        if (_setter && ((XZHTypeEncodingPropertyReadonly != (_typeEncoding & XZHTypeEncodingDataTypeMask)))) {_isSetterAccess = YES;}
+        if (_setter && ((XZHTypeEncodingPropertyReadonly != (_typeEncoding & XZHTypeEncodingPropertyMask)))) {_isSetterAccess = YES;}
         else {_isSetterAccess = NO;}
     }//end init
     return self;
@@ -479,7 +475,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     if (!property.name || ![_name isEqualToString:property.name]) {return NO;}
     if (_typeEncoding != property.typeEncoding) {return NO;}
     if (_foundationType != property.foundationType) {return NO;}
-    if (!property.encodingString || ![_encodingString isEqualToString:property.encodingString] ) {return NO;}
+    if (!property.fullEncodingString || ![_fullEncodingString isEqualToString:property.fullEncodingString] ) {return NO;}
     return YES;
 }
 
@@ -489,7 +485,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 }
 
 - (NSUInteger)hash {
-    return [_name hash] ^ (NSUInteger)(void *)_getter * (NSUInteger)(void *)_setter ^ _typeEncoding ^ _foundationType ^ [_encodingString hash];
+    return [_name hash] ^ (NSUInteger)(void *)_getter * (NSUInteger)(void *)_setter ^ _typeEncoding ^ _foundationType ^ [_fullEncodingString hash];
 }
 
 - (NSString *)description {

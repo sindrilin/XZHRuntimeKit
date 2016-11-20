@@ -69,16 +69,16 @@
 + (NSArray *)xzh_ignoreMappingJSONKeys;
 
 /**
- *  返回数组元素中对象的类型
+ *  如果属性类型是Array/Set/Dictionary时，实现此方法指定内部子对象的Class
  *  eg1、@{@"属性名" : @"Dog"}
  *  eg2、@{@"属性名" : Dog.class}
  *
  *  注意: key值只支持NSString类型来表示属性名
  */
-+ (NSDictionary *)xzh_classInArray;
++ (NSDictionary *)xzh_containerClass;
 
 /**
- *  指定对应的dictionary映射某个类型class
+ *  手动指定对应的json dictionary映射某个Class
  */
 + (Class)xzh_classForDictionary:(NSDictionary *)dic;
 

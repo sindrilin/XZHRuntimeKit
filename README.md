@@ -56,7 +56,7 @@
              @"cat" : @"animal.cat",
              };
 }
-+ (NSDictionary *)xzh_classInArray {
++ (NSDictionary *)xzh_containerClass {
     return @{
              @"childs" : [Child class],
              };
@@ -943,13 +943,20 @@ Class cls = objc_getClass("NSBlock");
 那么在我们代码中可以直接将`objc_getClass("NSBlock")`作为类簇类使用，但是为了考虑iOS SDK版本升级后，可能不再是`NSBlock`这个类来代替。那么所以如下这个代码可以在任何iOS SDK版本下找到block的对应的类簇类
 
 ```c
-static Class XZHGetNSBlockClass() {
+/**
+ *  因为Foundation并没有给出NSBlock这个类，所以只能通过Block实例不断向父类查询类型
+ *  如下代码找到的是 NSBlock 这个是三种block类型的`类簇类`，而真正使用的三种block内部类型:
+ *  >>>>  __NSGlobalBlock__ >>>> objc_getClass("__NSGlobalBlock__");
+ *  >>>>  __NSMallocBlock__ >>>> objc_getClass("__NSMallocBlock__");
+ *  >>>>  __NSStackBlock__  >>>> objc_getClass("__NSStackBlock__");
+ */
+Class XZHGetNSBlockClass() {
     static Class NSBlock = Nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         void (^block)(void) = ^(){};
         Class cls = [(NSObject*)block class];
-        while (cls && (class_getSuperclass(cls) != [NSObject class]) ) {
+        while (cls && (class_getSuperclass(cls) != [NSObject class]) ) {//>>> 一直遍历到NSObject停止
             cls = class_getSuperclass(cls);
         }
         NSBlock = cls;

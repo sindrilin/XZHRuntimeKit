@@ -30,15 +30,21 @@ typedef NS_ENUM(NSInteger, XZHPropertyMappedToJsonKeyType) {
 
 @class XZHPropertyMapper;
 
+/**
+ *  将一个json，如何解析成一个model
+ */
 typedef struct XZHJsonToModelContext {
     void *model;            // 实体类的一个对象
     void *classMapper;      // 实体类的ClassMapper
     void *jsonDic;          // 要解析的jsonDic
 }XZHJsonToModelContext;
 
+/**
+ *  将一个model，如何转成一个json
+ */
 typedef struct XZHModelToJsonContext {
     void *model;            // 从哪一个对象转成json对象
-    void *objectDic;        // 最终转换成的json对象
+    void *jsonDic;          // 最终转换成的json对象
 }XZHModelToJsonContext;
 
 /**
@@ -52,11 +58,6 @@ static xzh_force_inline NSDateFormatter* XZHDateFormatter(__unsafe_unretained NS
 static xzh_force_inline NSDictionary* XZHJSONStringToDic(__unsafe_unretained NSString *jsonString);
 
 /**
- *  从NSDictionary中使用keypath获取值，防止崩溃处理
- */
-static xzh_force_inline id XZHGetValueFromDictionaryWithKeyPath(__unsafe_unretained NSDictionary *dic, __unsafe_unretained NSString *keyPath);
-
-/**
  *  NSString/NSNumber/NSNull >>> NSNumber
  */
 static xzh_force_inline NSNumber* XZHNumberWithValue(__unsafe_unretained id value);
@@ -68,18 +69,19 @@ static xzh_force_inline NSNumber* XZHNumberWithModelProperty(__unsafe_unretained
 
 /**
  *  将id value根据property mapper记录的jsonkey，设置给property mapper保存的objc_property属性变量
- *  只接收Foundation类型对象，(Class、Method、SEL、等CoreFoundation实例、c指针需要使用NSValue预先包装好)
+ *  - 只接收Foundation类型对象
+ *  - Class、Method、SEL、等CoreFoundation实例、c指针变量 >>>> 使用NSValue预先包装好
  *
  *  @param jsonItemValue        对应的jsonValue，只接受三种Foundation类型值: 1)NSObject 2)NSNumber 3)NSValue
  *  @param object               实体类对象
  *  @param propertyMapper       PropertyMapper对象，属性与jsonkey的映射关系
  *
  *  该函数大体的逻辑为如下:
- *  - (1) 外层: 首先根据属性Ivar的类型分类
- *  - (2) 内层: 再根据传入的json item value的类型
+ *  - (1) 外层: 首先根据属性PropertyMapper->Ivar的类型进行分类
+ *  - (2) 内层: 再根据传入的json item value的类型进行分类
  *
  *  if ((mapper->_typeEncoding & XZHTypeEncodingDataTypeMask) == XZHTypeEncodingFoundationObject){
-         // Foundation Object
+         //>>>>>>>>>>>> 优先 Foundation Object 的条件case，大部分情况都是使用Foundation对象
          - NSURL
          - NSArray/NSMutableArray
          - NSSet/NSMutableSet
@@ -93,7 +95,8 @@ static xzh_force_inline NSNumber* XZHNumberWithModelProperty(__unsafe_unretained
          - NSBlock
          - 自定义继承自NSObject类
     } else if (mapper->_isCNumber) {
-         // int、float、double、long ... 数值需要预先使用NSNumber进行打包，然后传入进行设值
+         //>>>>>>>>>>>> int、float、double、long 
+         //>>>>>>>>>>>> 这些基本数值类型，需要预先使用 `NSNumber` 进行打包，然后传入进行设值
          - BOOL
          - char/int8_t
          - unsigned char/uint8_t
@@ -108,7 +111,7 @@ static xzh_force_inline NSNumber* XZHNumberWithModelProperty(__unsafe_unretained
          - long long/int64_t
          - unsigned long long/uint64_t
      } else {
-         // c 指针类型/CoreFoundation实例，数值需要预先使用NSValue进行打包，然后传入进行设值
+         // c 指针类型/CoreFoundation实例，数值需要预先使用 `NSValue` 进行打包，然后传入进行设值
          - int *p，char *s，int arr[5],
          - Class、Method、Property、SEL ... 等CoreFoundation结构体实例
          - 自定义c结构体实例、结构体数组 ....
@@ -156,24 +159,33 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
 static id XZHConvertModelToAbleJSONSerialization(id object);
 
 /**
- *  遍历JSON Dictionary 进行解析
+ *  遍历json字典，解析json
+ *  - (1) json.key、json.value都是已知，PropertyMapper未知 >>> 寻找PropertyMapper
+ *  - (2) 只需要找到jsonkey如何映射属性记录的PropertyMapper
+ *  - (3) 从ClassMapper->_jsonKeyPropertyMapperDic中获取到PropertyMapper
+ *  - (4) 将json.value根据PropertyMapper记录的Ivar类型，设置给model对象
  *
  *  @param key           dictionary.key
  *  @param value         dictionary.value
  *  @param context       XZHModelContext
  */
-static void XZHJsonToModelApplierFunctionWithJSONDict(const void *jsonKey, const void *jsonItemValue, void *context);
+static void XZHJsonToModelDicApplierFunction(const void *jsonKey, const void *jsonItemValue, void *context);
 
 /**
- *  遍历XZHClassMapper 进行解析
- *  - (1) _keyPathPropertyMappers
- *  - (2) _keyArrayPropertyMappers
- *  - (3) _allPropertyMappers
+ *  遍历XZHClassMapper->PropertyMappers，解析json
+ *  - (1) json.key、json.value都是未知，PropertyMapper已知 >>> 寻找json.key、json.value
+ *  - (2) 拿到当前被遍历的ProperyMapper
+ *  - (3) 判断ProperyMapper映射的jsonkey的类型:
+ *      - (3.1) simple key
+ *      - (3.2) keyPath
+ *      - (3.3) keyArray
+ *  - (4) jsonvalue = json中根据ProperyMapper->_mappedToXxx记录的jsonkey取值
+ *  - (5) 将json.value根据PropertyMapper记录的Ivar类型，设置给model对象
  *
  *  @param value        XZHPeropertyMapper
  *  @param context      XZHModelContext
  */
-static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, void *context);
+static void XZHJsonToModelArrayApplierFunction(const void *value, void *context);
 
 /**
  *  负责记录XZHPropertyModel属性与jsonkey之间如何映射的:
@@ -207,53 +219,22 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
      */
     XZHPropertyModel            *_property;
     
-    /**
-     *  属性所属的[NSObject类 class]
-     */
-    Class                       _generacCls;
+    Class                       _generacCls;                // 属性所在类的Class
+    Class                       _ivarClass;                 // 属性变量Ivar的类型Class
+    Class                       _containerCls;              // 容器属性变量为容器类型（Array、Dic、Set）时，其内部子对象的Class
     
-    /**
-     *  属性变量Ivar的类型Class
-     */
-    Class                       _ivarClass;
+    XZHTypeEncoding             _typeEncoding;              // Ivar的类型编码枚举值
+    NSString                    *_ivarEncodingString;       // Ivar的类型编码字符串
+    XZHFoundationType           _foundationType;            // Ivar的Foundation类型
     
-    /**
-     *  容器属性变量为容器类型（Array、Dic、Set）时，内部子对象的类型Class
-     */
-    Class                       _containerCls;
-    
-    /**
-     *  Ivar的类型编码
-     */
-    XZHTypeEncoding             _typeEncoding;
-    
-    /**
-     *  Ivar的类型编码字符串
-     */
-    NSString                    *_typeEncodingString;
-    
-    /**
-     *  Ivar的Foundation类型
-     */
-    XZHFoundationType           _foundationType;
-    
-    BOOL                        _isFoundationObject;
-    
-    /**
-     *  Ivar是否是c基本数值类型(int、float、double、long ....)
-     */
     BOOL                        _isCNumber;
-    
-    /**
-     *  Ivar是否是NSNumber基本数值类型
-     */
+    BOOL                        _isFoundationObject;
     BOOL                        _isNSNumber;
     
-    /**
-     *  是否能够使用setter/getter
-     */
     BOOL                        _isGetterAccess;
     BOOL                        _isSetterAccess;
+    
+    XZHPropertyMappedToJsonKeyType _mappedType;
     
     /**
      *  属性映射简单的json key
@@ -278,8 +259,6 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
      */
     NSArray                     *_mappedToKeyArray;
     
-    XZHPropertyMappedToJsonKeyType _mappedType;
-    
     /**
      *  多个实体类属性 映射 同一个json key
          @{
@@ -289,7 +268,8 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
              @"ID"       :@"uid",
          }
          
-         id->userId->ID 链起来
+         - (1) id->userId->ID 链起来
+         - (2) [XZHClassMapper->_jsonKeyPropertyMapperDic setObject:ProeprtyMapper forKey:jsonKey];
      */
     XZHPropertyMapper         *_next;
 }
@@ -309,7 +289,7 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
         _ivarClass = property.cls;
         _generacCls = generacCls;
         _typeEncoding = property.typeEncoding;
-        _typeEncodingString = property.encodingString;
+        _ivarEncodingString = property.ivarEncodingString;
         _foundationType = property.foundationType;
         _isCNumber = property.isCNumber;
         _isNSNumber = (XZHFoundationTypeNSNumber == _foundationType) || (XZHFoundationTypeNSDecimalNumber == _foundationType);
@@ -463,8 +443,8 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
         /**
          *  如果属性的类型是Array、Set、Dictionary容器时，记录其数组内部元素Class
          */
-        if (XZHClassRespondsToSelector(cls, @selector(xzh_classInArray))) {
-            NSDictionary *classInArrayDic = [(id<XZHJSONModelMappingRules>)cls xzh_classInArray];
+        if (XZHClassRespondsToSelector(cls, @selector(xzh_containerClass))) {
+            NSDictionary *classInArrayDic = [(id<XZHJSONModelMappingRules>)cls xzh_containerClass];
             [classInArrayDic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull propertyName, id  _Nonnull class, BOOL * _Nonnull stop) {
                 if ([propertyName isKindOfClass:[NSString class]]) {
                     if ([class isKindOfClass:[NSString class]]) {
@@ -623,7 +603,7 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
 + (instancetype)xzh_modelFromJSONDictionary:(NSDictionary *)jsonDic {
     if (![jsonDic isKindOfClass:[NSDictionary class]]) {return nil;}
     
-    XZHClassMapper *clsMapper = [XZHClassMapper classMapperWithClass:[self class]];
+    __unsafe_unretained XZHClassMapper *clsMapper = [XZHClassMapper classMapperWithClass:[self class]];
     if (!clsMapper || 0 == clsMapper->_totalMappedCount) {return nil;}
 
     id model = [[self alloc] init];
@@ -635,20 +615,19 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
     ctx.classMapper = (__bridge void *)(clsMapper);
     
     if (jsonDic.count <= clsMapper->_totalMappedCount) {
-        /**
-         *  此种情况下，实体类中的一部分属性，可能不存在对应的jsonvalue
-         *  - (1) 首先遍历jsondic.key对应的PropertyMapper来解析所有的 json item value，来完成大部分的属性值设置
-         *  - (2) 再按照 映射 jsonkeyPath PropertyMapper来解析对应的 json item value，辅助部分属性值设置
-         *  - (3) 再按照 映射 jsonKeyArray PropertyMapper来解析对应的 json item value，辅助部分属性值设置
-         */
-        CFDictionaryApplyFunction((CFDictionaryRef)jsonDic, XZHJsonToModelApplierFunctionWithJSONDict, &ctx);
-        if(clsMapper->_keyPathMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyPathPropertyMappers, CFRangeMake(0, clsMapper->_keyPathMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
-        if(clsMapper->_keyArrayMappedCount > 0) {CFArrayApplyFunction(clsMapper->_keyArrayPropertyMappers, CFRangeMake(0, clsMapper->_keyArrayMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);}
+        CFDictionaryApplyFunction((CFDictionaryRef)jsonDic, XZHJsonToModelDicApplierFunction, &ctx);
+        
+        // property mapped to keyPath
+        if(clsMapper->_keyPathMappedCount > 0) {
+            CFArrayApplyFunction(clsMapper->_keyPathPropertyMappers, CFRangeMake(0, clsMapper->_keyPathMappedCount), XZHJsonToModelArrayApplierFunction, &ctx);
+        }
+        
+        // property mapped to keyArray
+        if(clsMapper->_keyArrayMappedCount > 0) {
+            CFArrayApplyFunction(clsMapper->_keyArrayPropertyMappers, CFRangeMake(0, clsMapper->_keyArrayMappedCount), XZHJsonToModelArrayApplierFunction, &ctx);
+        }
     } else {
-        /**
-         *  此种情况下，可能实体类全部属性都存在对应的jsonvalue，所以直接遍历所有的classMapper's property来解析json
-         */
-        CFArrayApplyFunction(clsMapper->_allPropertyMappers, CFRangeMake(0, clsMapper->_totalMappedCount), XZHJsonToModelApplierFunctionWithPropertyMappers, &ctx);
+        CFArrayApplyFunction(clsMapper->_allPropertyMappers, CFRangeMake(0, clsMapper->_totalMappedCount), XZHJsonToModelArrayApplierFunction, &ctx);
     }
     return model;
 }
@@ -711,16 +690,18 @@ static xzh_force_inline NSDictionary* XZHJSONStringToDic(__unsafe_unretained NSS
     }
 }
 
+/**
+ *  主要是NSString转NSNumber
+ */
 static xzh_force_inline NSNumber* XZHNumberWithValue(__unsafe_unretained id value) {
     static NSCharacterSet *dot = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         dot = [NSCharacterSet characterSetWithRange:NSMakeRange('.', 1)];
     });
-    
-    if ([value isKindOfClass:[NSNumber class]]) {
-        return (NSNumber*)value;
-    } else if ([value isKindOfClass:[NSString class]]) {
+    if ([value isKindOfClass:[NSString class]]) {
+        
+        // 代表数值的字符串
         static NSDictionary *defaultDic = nil;
         static dispatch_once_t onceToken;
         dispatch_once(&onceToken, ^{
@@ -741,17 +722,19 @@ static xzh_force_inline NSNumber* XZHNumberWithValue(__unsafe_unretained id valu
         });
         id tmp = [defaultDic objectForKey:value];
         if (tmp) {return tmp;}
-        if ([(NSString *)value rangeOfCharacterFromSet:dot].location != NSNotFound) {
-            // 带小数的
+        
+        // 直接可以转NSNumber的数值字符串，过滤掉 NaN、Inf 的情况
+        if ([(NSString *)value rangeOfCharacterFromSet:dot].location != NSNotFound) {// 带小数的
             const char *cstring = ((NSString *)value).UTF8String;
             if (!cstring) return @(0);
             double num = atof(cstring);
             if (isnan(num) || isinf(num)) return @(0);//NaN、Inf默认返回0
             return @(num);
-        } else {
-            // 整数
+        } else {// 整数
             return @([value integerValue]);
         }
+    } else if ([value isKindOfClass:[NSNumber class]]) {
+        return (NSNumber*)value;
     } else if (value == (id)kCFNull) {
         return nil;
     }
@@ -852,14 +835,19 @@ static xzh_force_inline NSNumber* XZHNumberWithModelProperty(__unsafe_unretained
     return nil;
 }
 
+/**
+ *  属性映射多个jsonkey时，其内部子jsonkey只支持两种:
+ *  - (1) simple key
+ *  - (2) keyPath
+ */
 static xzh_force_inline id XZHGetValueFromDictionaryWithMultiJSONKeyArray(__unsafe_unretained NSDictionary *dic, __unsafe_unretained NSArray *keyArray) {
     if (!keyArray) {return nil;}
     if (![keyArray isKindOfClass:[NSArray class]]) {return nil;}
     id value = nil;
     for (id itemKey in keyArray) {
         if ([itemKey isKindOfClass:[NSString class]]) {
-            //simple key
             if ([itemKey rangeOfString:@"."].location != NSNotFound) {
+                // 防止KVC崩溃
                 @try {
                     value = [dic valueForKeyPath:itemKey];
                 }
@@ -878,291 +866,271 @@ static xzh_force_inline id XZHGetValueFromDictionaryWithMultiJSONKeyArray(__unsa
     return nil;
 }
 
-
-static xzh_force_inline id XZHGetValueFromDictionaryWithKeyPath(__unsafe_unretained NSDictionary *dic, __unsafe_unretained NSString *keyPath) {
-    if (!dic || ![dic isKindOfClass:[NSDictionary class]] || !keyPath || ![keyPath isKindOfClass:[NSString class]]) return nil;
-    id value = nil;
-    @try {
-        value = [dic valueForKeyPath:keyPath];
-    } @catch (NSException *exception) {
-        value = nil;
-    }
-    return value;
-}
-
-static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValue, __unsafe_unretained id model, __unsafe_unretained XZHPropertyMapper *propertyMapper) {
+static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValue, __unsafe_unretained id model, __unsafe_unretained XZHPropertyMapper *propertyMapper)
+{
     if (!jsonItemValue || !model || !propertyMapper) {return;}
     if (!propertyMapper->_isSetterAccess) {return;}
     SEL setter = propertyMapper->_property.setter;
     
+    /**
+     *  三种类型:
+     *  - (1) Foundation                    >>> XZHFoundationTypeNone != propertyMapper->_foundationType
+     *  - (2) int\float\double\bool\char    >>> YES == propertyMapper->_isCNumber
+     *  - (3) char*\int*\CF...Ref\CGRect
+     */
+    
     if (XZHFoundationTypeNone != propertyMapper->_foundationType){
-        switch (propertyMapper->_foundationType) {//start switch mapper->_foundationType
-            case XZHFoundationTypeNSString:
-            case XZHFoundationTypeNSMutableString: {
-                if ((id)kCFNull == jsonItemValue) {return;}
-                if ([jsonItemValue isKindOfClass:[NSString class]]) {
-                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? jsonItemValue : [jsonItemValue mutableCopy]);
-                } else if ([jsonItemValue isKindOfClass:[NSDate class]]) {
-                    if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
-                        NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
-                        if (dateFormat) {
-                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
-                            NSString *dateStr = [fomatter stringFromDate:jsonItemValue];
-                            if (dateStr) {
-                                ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? dateStr : [dateStr mutableCopy]);
+        if (XZHFoundationTypeNSNull == propertyMapper->_foundationType) {
+            if ([jsonItemValue isKindOfClass:[NSNull class]]) {((void (*)(id, SEL, NSNull*))(void *) objc_msgSend)(model, setter, (id)kCFNull);}
+        } else {
+            if ((id)kCFNull == jsonItemValue) {return;}
+            switch (propertyMapper->_foundationType) {
+                case XZHFoundationTypeNSString:
+                case XZHFoundationTypeNSMutableString: {
+                    if ([jsonItemValue isKindOfClass:[NSString class]]) {//NSString
+                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? jsonItemValue : [jsonItemValue mutableCopy]);
+                    } else if ([jsonItemValue isKindOfClass:[NSNumber class]]) {//NSNumber
+                        NSString *valueString = [(NSNumber*)jsonItemValue stringValue];
+                        if (valueString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
+                        }
+                    } else if ([jsonItemValue isKindOfClass:[NSURL class]]) {//NSURL
+                        NSString *valueString = [(NSURL*)jsonItemValue absoluteString];
+                        if (valueString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
+                        }
+                    } else if ([jsonItemValue isKindOfClass:[NSDate class]]) {//NSDate
+                        if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
+                            NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
+                            if (dateFormat) {
+                                NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                                NSString *dateStr = [fomatter stringFromDate:jsonItemValue];
+                                if (dateStr) {
+                                    ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? dateStr : [dateStr mutableCopy]);
+                                }
                             }
                         }
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSNumber class]]) {
-                    NSString *valueString = [(NSNumber*)jsonItemValue stringValue];
-                    if (valueString) {
-                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSURL class]]) {
-                    NSString *valueString = [(NSURL*)jsonItemValue absoluteString];
-                    if (valueString) {
-                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSData class]]) {
-                    NSString *valueString = [[NSString alloc] initWithData:jsonItemValue encoding:NSUTF8StringEncoding];
-                    if (valueString) {
-                        ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
-                    }
-                }
-            }
-                break;
-            case XZHFoundationTypeNSNumber:
-            case XZHFoundationTypeNSDecimalNumber: {
-                // jsonValue.class ==> 1)NSNumber 2)NSString（数值字符串/日期字符串） 3)NSDate
-                if ([jsonItemValue isKindOfClass:[NSNumber class]]) {
-                    ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, jsonItemValue);
-                } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
-//                    jsonItemValue = XZHConvertNullNSString(jsonItemValue);
-                    if (!jsonItemValue)return;
-                    NSDate *date  = nil;
-                    if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
-                        NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
-                        if (dateFormat) {
-                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
-                            date = [fomatter dateFromString:jsonItemValue];
+                    } else if ([jsonItemValue isKindOfClass:[NSData class]]) {//NSData
+                        NSString *valueString = [[NSString alloc] initWithData:jsonItemValue encoding:NSUTF8StringEncoding];
+                        if (valueString) {
+                            ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSString) ? valueString : [valueString mutableCopy]);
                         }
                     }
-                    NSNumber *number = nil;
-                    if (date) {
-                        number = [NSNumber numberWithDouble:[date timeIntervalSinceReferenceDate]];
-                    } else {
-                        number = XZHNumberWithValue(jsonItemValue);
-                    }
-                    if (number) {
-                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, number);
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSDate class]]) {
-                    NSNumber *number = [NSNumber numberWithDouble:[(NSDate*)jsonItemValue timeIntervalSinceReferenceDate]];
-                    if (number) {
-                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, number);
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSValue class]]) {
-                    ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, jsonItemValue);
                 }
-            }
-                break;
-            case XZHFoundationTypeNSURL: {
-                // jsonValue.class ==> 1)NSURL 2)NSString
-                if ([jsonItemValue isKindOfClass:[NSURL class]]) {
-                    ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, jsonItemValue);
-                } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
-//                    jsonItemValue = XZHConvertNullNSString(jsonItemValue);
-                    if (jsonItemValue) {
-                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, [[NSURL alloc] initWithString:jsonItemValue]);
+                    break;
+                case XZHFoundationTypeNSNumber:
+                case XZHFoundationTypeNSDecimalNumber: {
+                    if ([jsonItemValue isKindOfClass:[NSNumber class]]) {//NSNumber
+                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    } else if ([jsonItemValue isKindOfClass:[NSString class]]) {//NSString >>> (1)日期字符串 (2)数字字符串
+                        NSDate *date  = nil;
+                        if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
+                            NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
+                            if (dateFormat) {
+                                NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                                date = [fomatter dateFromString:jsonItemValue];
+                            }
+                        }
+                        NSNumber *number = nil;
+                        if (date) {
+                            number = [NSNumber numberWithDouble:[date timeIntervalSinceReferenceDate]];
+                        } else {
+                            number = XZHNumberWithValue(jsonItemValue);
+                        }
+                        if (number) {
+                            ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, number);
+                        }
+                    } else if ([jsonItemValue isKindOfClass:[NSDate class]]) {//NSDate
+                        NSNumber *number = [NSNumber numberWithDouble:[(NSDate*)jsonItemValue timeIntervalSinceReferenceDate]];
+                        if (number) {
+                            ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, number);
+                        }
+                    } else if ([jsonItemValue isKindOfClass:[NSValue class]]) {//NSValue
+                        ((void (*)(id, SEL, NSNumber*))(void *) objc_msgSend)(model, setter, jsonItemValue);
                     }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSArray :
-            case XZHFoundationTypeNSMutableArray: {
-                // jsonValue.class ==> 1) NSArray 2)NSMutableArray 3) NSSet
-                NSArray *valueArray = nil;
-                if ([jsonItemValue isKindOfClass:[NSArray class]]) {valueArray = jsonItemValue;}
-                else if ([jsonItemValue isKindOfClass:[NSSet class]]) {valueArray = [jsonItemValue allObjects];}
-                if (!valueArray) {return;}
-                
-                if (propertyMapper->_containerCls) {
+                    break;
+                case XZHFoundationTypeNSURL: {
+                    if ([jsonItemValue isKindOfClass:[NSURL class]]) {//NSURL
+                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    } else if ([jsonItemValue isKindOfClass:[NSString class]]) {//NSString
+                        if (jsonItemValue) {
+                            ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, [[NSURL alloc] initWithString:jsonItemValue]);
+                        }
+                    }
+                }
+                    break;
+                case XZHFoundationTypeNSArray :
+                case XZHFoundationTypeNSMutableArray: {
+                    NSArray *valueArray = nil;
+                    if ([jsonItemValue isKindOfClass:[NSArray class]]) {valueArray = jsonItemValue;}
+                    else if ([jsonItemValue isKindOfClass:[NSSet class]]) {valueArray = [jsonItemValue allObjects];}//NSSet >>> NSArray
+                    if (!valueArray) {return;}
+                    
                     /**
-                     *  解析array中每一个元素为实体对象，然后将解析的对象设置到model
+                     *  按照 `Class cls = [NSObejct xzh_containerClass];` 返回的Dic中配置的数组内子对象的Class进行json解析model
+                     *  id newItem = [cls xzh_modelFromJSONDictionary:itemJSON];
                      */
-                    NSMutableArray *mutableArray = [[NSMutableArray alloc] initWithCapacity:valueArray.count];
-                    for (id item in valueArray) {
-                        if ([item isKindOfClass:propertyMapper->_containerCls]) {
-                            //jsonItemValue 已经是指定类型的对象
-                            [mutableArray addObject:item];
-                        } else if ([item isKindOfClass:[NSDictionary class]]) {
+                    if (propertyMapper->_containerCls) {
+                        NSMutableArray *mutableArray = [[NSMutableArray alloc] initWithCapacity:valueArray.count];
+                        for (id item in valueArray) {
+                            if ([item isKindOfClass:propertyMapper->_containerCls]) {
+                                [mutableArray addObject:item];
+                            } else if ([item isKindOfClass:[NSDictionary class]]) {
+                                Class cls = propertyMapper->_containerCls;
+                                if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
+                                    cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:item];
+                                }
+                                id newItem = [cls xzh_modelFromJSONDictionary:item];
+                                if (newItem)  {[mutableArray addObject:newItem];}
+                            }
                             /**
-                             *  item value 是 NSDictionary类型的对象，继续解析按照Class进行解析:
-                             *  - (1)_containerCls指定的Class
-                             *  - (2)实现`+[NSObject xzh_classForDictionary:]`方法返回的Class
+                             *  如果数组元素内部子元素又是Array类型，通过如下组装成如下json格式:
+                             *  @[
+                             *      @"array1" : @[@"1", @"2", @"3"],
+                             *      @"array2" : @[@"1", @"2", @"3"],
+                             *      @"array3" : @[@"1", @"2", @"3"]
+                             *  ]
+                             *  将内部的Array子对象，包装成一个实体类，其内部拥有一个Array类型的属性即可.
                              */
-                            Class cls = propertyMapper->_containerCls;
-                            if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
-                                cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:item];
-                            }
-                            
-                            id newItem = [cls xzh_modelFromJSONDictionary:item];
-                            if (newItem)  {[mutableArray addObject:newItem];}
                         }
+                        ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSArray) ? mutableArray.copy : mutableArray);
+                    } else {
+                        ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSArray) ? valueArray : valueArray.mutableCopy);
                     }
-                    ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSArray) ? mutableArray.copy : mutableArray);
-                } else {
-                    ((void (*)(id, SEL, NSArray*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSArray) ? valueArray : valueArray.mutableCopy);
                 }
-            }
-                break;
-            case XZHFoundationTypeNSDictionary:
-            case XZHFoundationTypeNSMutableDictionary: {
-                // jsonValue.class ==> 1)NSDictionary 2)NSMutableDictionary
-                NSDictionary *valueDic = nil;
-                if ([jsonItemValue isKindOfClass:[NSDictionary class]]) {valueDic = jsonItemValue;}
-                else if ([jsonItemValue isKindOfClass:[NSString class]]) {valueDic = XZHJSONStringToDic(jsonItemValue);}// 支持JSON字符串
-                if (!valueDic){return;}
-                
-                if (propertyMapper->_containerCls) {
-                    NSMutableDictionary *mutableDic = [[NSMutableDictionary alloc] initWithCapacity:valueDic.count];
-                    [valueDic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
-                        if ([obj isKindOfClass:propertyMapper->_containerCls]) {
-                            [mutableDic setObject:obj forKey:key];
-                        } else if ([obj isKindOfClass:[NSDictionary class]]){
-                            Class cls = propertyMapper->_containerCls;
-                            if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
-                                cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:obj];
-                            }
-                            id newItem = [propertyMapper->_containerCls xzh_modelFromJSONDictionary:obj];
-                            if (newItem) {[mutableDic setObject:newItem forKey:key];}
-                        }
-                    }];
-                    ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? mutableDic.copy : mutableDic);
-                } else {
-                    ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? valueDic : valueDic.mutableCopy);
-                }
-            }
-                break;
-            case XZHFoundationTypeNSSet:
-            case XZHFoundationTypeNSMutableSet: {
-                // jsonValue.class ==> 1) NSSet 2)NSMutableSet 3) NSArray
-                NSSet *valueSet = nil;
-                if ([jsonItemValue isKindOfClass:[NSSet class]]) {valueSet = jsonItemValue;}
-                else if ([jsonItemValue isKindOfClass:[NSArray class]]) {valueSet = [NSSet setWithArray:jsonItemValue];}
-                if (!valueSet) return;
-                
-                if (propertyMapper->_containerCls) {
-                    NSMutableSet *mutableSet = [[NSMutableSet alloc] initWithCapacity:valueSet.count];
-                    for (id item in valueSet) {
-                        if ([item isKindOfClass:propertyMapper->_containerCls]) {
-                            [mutableSet addObject:item];
-                        } else if ([item isKindOfClass:[NSDictionary class]]) {
-                            Class cls = propertyMapper->_containerCls;
-                            if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
-                                cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:item];
-                            }
-                            
-                            id newItem = [propertyMapper->_containerCls xzh_modelFromJSONDictionary:item];
-                            if (newItem) {[mutableSet addObject:newItem];}
-                        }
-                        ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? mutableSet.copy : mutableSet);
-                    }
-                } else {
-                    ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? valueSet : valueSet.mutableCopy);
-                }
-            }
-                break;
-            case XZHFoundationTypeCustomer: {
-                // jsonValue.class ==> 1)自定义NSObject类型 2)NSDictionary 3)NSString
-                if ([jsonItemValue isKindOfClass:propertyMapper->_ivarClass]) {
-                    ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, jsonItemValue);
-                } else if ([jsonItemValue isKindOfClass:[NSDictionary class]] || [jsonItemValue isKindOfClass:[NSString class]]) {
-                    if ([jsonItemValue isKindOfClass:[NSString class]]) {
-//                        value = XZHConvertNullNSString(value);
-                        jsonItemValue = XZHJSONStringToDic(jsonItemValue);
-                    }
-                    if (!jsonItemValue)return;
+                    break;
+                case XZHFoundationTypeNSDictionary:
+                case XZHFoundationTypeNSMutableDictionary: {
+                    NSDictionary *valueDic = nil;
+                    if ([jsonItemValue isKindOfClass:[NSDictionary class]]) {valueDic = jsonItemValue;}
+                    else if ([jsonItemValue isKindOfClass:[NSString class]]) {valueDic = XZHJSONStringToDic(jsonItemValue);}// 支持JSON字符串
+                    if (!valueDic){return;}
                     
-                    Class cls = propertyMapper->_ivarClass;
-                    if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
-                        cls = [propertyMapper->_generacCls xzh_classForDictionary:jsonItemValue];
-                    }
-                    id newItem = [cls xzh_modelFromJSONDictionary:jsonItemValue];
-                    if (newItem) {
-                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, newItem);
+                    if (propertyMapper->_containerCls) {
+                        NSMutableDictionary *mutableDic = [[NSMutableDictionary alloc] initWithCapacity:valueDic.count];
+                        [valueDic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+                            if ([obj isKindOfClass:propertyMapper->_containerCls]) {
+                                [mutableDic setObject:obj forKey:key];
+                            } else if ([obj isKindOfClass:[NSDictionary class]]){
+                                Class cls = propertyMapper->_containerCls;
+                                if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
+                                    cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:obj];
+                                }
+                                id newItem = [propertyMapper->_containerCls xzh_modelFromJSONDictionary:obj];
+                                if (newItem) {[mutableDic setObject:newItem forKey:key];}
+                            }
+                        }];
+                        ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? mutableDic.copy : mutableDic);
+                    } else {
+                        ((void (*)(id, SEL, NSDictionary*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? valueDic : valueDic.mutableCopy);
                     }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSDate: {
-                // jsonValue.class ==> 1)NSString（日期字符串） 2)NSDate 3) NSNumber
-                if ([jsonItemValue isKindOfClass:[NSDate class]]) {
-                    ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, jsonItemValue);
-                } else if ([jsonItemValue isKindOfClass:[NSNumber class]]) {
-                    NSDate *date = [NSDate dateWithTimeIntervalSinceReferenceDate:[(NSNumber*)jsonItemValue doubleValue]];
-                    if (date) {
-                        ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, date);
-                    }
-                } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
-//                    value = XZHConvertNullNSString(value);
-                    if (!jsonItemValue)return;
-                    if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
-                        NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
-                        if (dateFormat) {
-                            NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
-                            NSDate *date = [fomatter dateFromString:jsonItemValue];
-                            if (date) {
-                                ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, date);
+                    break;
+                case XZHFoundationTypeNSSet:
+                case XZHFoundationTypeNSMutableSet: {
+                    NSSet *valueSet = nil;
+                    if ([jsonItemValue isKindOfClass:[NSSet class]]) {valueSet = jsonItemValue;}
+                    else if ([jsonItemValue isKindOfClass:[NSArray class]]) {valueSet = [NSSet setWithArray:jsonItemValue];}//Array >>> Set
+                    if (!valueSet) return;
+                    
+                    if (propertyMapper->_containerCls) {
+                        NSMutableSet *mutableSet = [[NSMutableSet alloc] initWithCapacity:valueSet.count];
+                        for (id item in valueSet) {
+                            if ([item isKindOfClass:propertyMapper->_containerCls]) {
+                                [mutableSet addObject:item];
+                            } else if ([item isKindOfClass:[NSDictionary class]]) {
+                                Class cls = propertyMapper->_containerCls;
+                                if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
+                                    cls = [(id<XZHJSONModelMappingRules>)propertyMapper->_generacCls xzh_classForDictionary:item];
+                                }
+                                
+                                id newItem = [propertyMapper->_containerCls xzh_modelFromJSONDictionary:item];
+                                if (newItem) {[mutableSet addObject:newItem];}
                             }
+                            ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? mutableSet.copy : mutableSet);
+                        }
+                    } else {
+                        ((void (*)(id, SEL, NSSet*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSDictionary) ? valueSet : valueSet.mutableCopy);
+                    }
+                }
+                    break;
+                case XZHFoundationTypeCustomer: {
+                    if ([jsonItemValue isKindOfClass:propertyMapper->_ivarClass]) {
+                        ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    } else if ([jsonItemValue isKindOfClass:[NSDictionary class]] || [jsonItemValue isKindOfClass:[NSString class]]) {
+                        if ([jsonItemValue isKindOfClass:[NSString class]]) {
+                            jsonItemValue = XZHJSONStringToDic(jsonItemValue);
+                        }
+                        if (!jsonItemValue)return;
+
+                        Class cls = propertyMapper->_ivarClass;
+                        if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_classForDictionary:))) {
+                            cls = [propertyMapper->_generacCls xzh_classForDictionary:jsonItemValue];
+                        }
+                        id newItem = [cls xzh_modelFromJSONDictionary:jsonItemValue];
+                        if (newItem) {
+                            ((void (*)(id, SEL, id))(void *) objc_msgSend)(model, setter, newItem);
                         }
                     }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSData:
-            case XZHFoundationTypeNSMutableData: {
-                // 1)NSData 2)NSString
-                if ([jsonItemValue isKindOfClass:[NSData class]]) {
-                    ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSData) ? jsonItemValue : [jsonItemValue mutableCopy]);
-                } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
-                    //                    value = XZHConvertNullNSString(value);
-                    if (!jsonItemValue)return;
-                    
-                    NSData *data = [(NSString*)jsonItemValue dataUsingEncoding:NSUTF8StringEncoding];
-                    if (data) {
-                        ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSData) ? data : [data mutableCopy]);
+                    break;
+                case XZHFoundationTypeNSDate: {
+                    if ([jsonItemValue isKindOfClass:[NSDate class]]) {
+                        ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
+                        if (!jsonItemValue)return;
+                        if (XZHClassRespondsToSelector(propertyMapper->_generacCls, @selector(xzh_dateFormat))) {
+                            NSString *dateFormat = [propertyMapper->_generacCls xzh_dateFormat];
+                            if (dateFormat) {
+                                NSDateFormatter *fomatter = XZHDateFormatter(dateFormat);
+                                NSDate *date = [fomatter dateFromString:jsonItemValue];
+                                if (date) {
+                                    ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, date);
+                                }
+                            }
+                        }
+                    } else if ([jsonItemValue isKindOfClass:[NSNumber class]]) {
+                        NSDate *date = [NSDate dateWithTimeIntervalSinceReferenceDate:[(NSNumber*)jsonItemValue doubleValue]];
+                        if (date) {
+                            ((void (*)(id, SEL, NSDate*))(void *) objc_msgSend)(model, setter, date);
+                        }
                     }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSValue: {
-                if ([jsonItemValue isKindOfClass:[NSValue class]]) {
-                    ((void (*)(id, SEL, NSValue*))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    break;
+                case XZHFoundationTypeNSData:
+                case XZHFoundationTypeNSMutableData: {
+                    if ([jsonItemValue isKindOfClass:[NSData class]]) {
+                        ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSData) ? jsonItemValue : [jsonItemValue mutableCopy]);
+                    } else if ([jsonItemValue isKindOfClass:[NSString class]]) {
+                        NSData *data = [(NSString*)jsonItemValue dataUsingEncoding:NSUTF8StringEncoding];
+                        if (data) {
+                            ((void (*)(id, SEL, NSData*))(void *) objc_msgSend)(model, setter, (propertyMapper->_foundationType == XZHFoundationTypeNSData) ? data : [data mutableCopy]);
+                        }
+                    }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSBlock: {
-                if ([jsonItemValue isKindOfClass:XZHGetNSBlockClass()]) {
-                    /**
-                     *  NSBlock的任意类: void(^)()，任意参数类型的block都可以设置进去，但是取出来执行的时候需要看参数类型
-                     *  否则会程序崩溃
-                     */
-                    ((void (*)(id, SEL, void(^)()))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    break;
+                case XZHFoundationTypeNSValue: {
+                    if ([jsonItemValue isKindOfClass:[NSValue class]]) {
+                        ((void (*)(id, SEL, NSValue*))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    }
                 }
-            }
-                break;
-            case XZHFoundationTypeNSNull: {
-                if ([jsonItemValue isKindOfClass:[NSNull class]]) {
-                    ((void (*)(id, SEL, NSNull*))(void *) objc_msgSend)(model, setter, (id)kCFNull);
+                    break;
+                case XZHFoundationTypeNSBlock: {
+                    if ([jsonItemValue isKindOfClass:XZHGetNSBlockClass()]) {
+                        /**
+                         *  NSBlock的任意类 >>>> void(^)()
+                         * 任意参数类型的block都可以设置进去，但是取出来执行的时候需要看参数类型去执行，否则会程序崩溃.
+                         */
+                        ((void (*)(id, SEL, void(^)()))(void *) objc_msgSend)(model, setter, jsonItemValue);
+                    }
                 }
+                    break;
+                    
+                default:
+                    break;
             }
-                break;
-            case  XZHFoundationTypeNone:
-                break;
-                
-        }//end switch mapper->_foundationType
-        
+        }
     } else if (propertyMapper->_isCNumber) {
         NSNumber *number = XZHNumberWithValue(jsonItemValue);
         if (!number) return;
@@ -1218,6 +1186,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
             }
                 break;
             case XZHTypeEncodingLongDouble: {
+                //TODO: Important: Objective-C does not support the long double type. @encode(long double) returns d, which is the same encoding as for double.
                 long double num = [number doubleValue];
                 ((void (*)(id, SEL, long double))(void *) objc_msgSend)(model, setter, num);
             }
@@ -1245,7 +1214,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
          *  C指针类型的变量，统一使用NSValue进行包装
          *  且使用NSValue包装c指针变量，会默认都转换成 `void*` 类型，其type encoding >>>> `^v`
          *
-         *  - (1) c指针变量、CoreFoundation部分结构体实例
+         *  - (1) c指针变量、CoreFoundation部分结构体实例指针变量
          *      - NSValue >>>> c指针变量
          *      - c指针变量 >>>> void*
          *      - c指针变量 >>>> Class/SEL
@@ -1259,37 +1228,37 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
             case XZHTypeEncodingCString:
             case XZHTypeEncodingCPointer: {
                 if (jsonItemValue == (id)kCFNull) {
-                    ((void (*)(id, SEL, void*))(void *) objc_msgSend)(model, setter, (void*)NULL);
+                    ((void (*)(id, SEL, void*))(void *) objc_msgSend)(model, setter, (void*)0);
                 } else if ([jsonItemValue isKindOfClass:[NSValue class]]) {
                     NSValue *nsvalue = (NSValue *)jsonItemValue;
-                    if (nsvalue.objCType && 0 == strcmp(nsvalue.objCType, "^v")) {
+                    if (nsvalue.objCType && (0 == strcmp(nsvalue.objCType, "^v"))) {
                         ((void (*)(id, SEL, void*))(void *) objc_msgSend)(model, setter, nsvalue.pointerValue);
                     }
                 }
             }
                 break;
-            case XZHTypeEncodingObjcClass: {
+            case XZHTypeEncodingClass: {
                 if (jsonItemValue == (id)kCFNull) {
-                    ((void (*)(id, SEL, Class))(void *) objc_msgSend)(model, setter, (Class)NULL);
+                    ((void (*)(id, SEL, Class))(void *) objc_msgSend)(model, setter, (Class)0);
                 } else {
                     if ([jsonItemValue isKindOfClass:[NSString class]]) {
-                        Class cls = NSClassFromString(jsonItemValue);
+                        Class cls = objc_getClass([jsonItemValue UTF8String]);
                         if (Nil != cls) {
                             ((void (*)(id, SEL, Class))(void *) objc_msgSend)(model, setter, cls);
                         }
                     } else if ([jsonItemValue isKindOfClass:[NSValue class]]) {
                         NSValue *nsvalue = (NSValue *)jsonItemValue;
-                        if (nsvalue.objCType && 0 == strcmp(nsvalue.objCType, "^v")) {
+                        if (nsvalue.objCType && (0 == strcmp(nsvalue.objCType, "^v"))) {
                             char *clsName = (char *)nsvalue.pointerValue;
                             if (NULL != clsName) {
-                                Class cls = objc_getClass(clsName);//一、objc_getClass()
+                                Class cls = objc_getClass(clsName);
                                 if (cls) {
                                     ((void (*)(id, SEL, Class))(void *) objc_msgSend)(model, setter, cls);
                                 }
                             }
                         }
                     } else {
-                        Class cls = object_getClass(jsonItemValue);//二、object_getClass()读取obj->_isa
+                        Class cls = object_getClass(jsonItemValue);
                         if (cls) {
                             ((void (*)(id, SEL, Class))(void *) objc_msgSend)(model, setter, cls);
                         }
@@ -1310,8 +1279,7 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
                     if (nsvalue.objCType && strcmp(nsvalue.objCType, "^v")) {
                         char *selC = (char *)nsvalue.pointerValue;
                         if (selC) {
-                            NSString *selF = [NSString stringWithUTF8String:selC];
-                            SEL sel = NSSelectorFromString(selF);
+                            SEL sel = sel_registerName(selC);
                             if (sel) {
                                 ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(model, setter, sel);
                             }
@@ -1323,13 +1291,14 @@ static void XZHSetFoundationObjectToProperty(__unsafe_unretained id jsonItemValu
             case XZHTypeEncodingCArray:
             case XZHTypeEncodingCStruct:
             case XZHTypeEncodingCUnion: {
+                //只能当做NSValue进行存取
                 if (jsonItemValue == (id)kCFNull) {
                     ((void (*)(id, SEL, SEL))(void *) objc_msgSend)(model, setter, (SEL)NULL);
                 } else if ([jsonItemValue isKindOfClass:[NSValue class]]) {
                     NSValue *nsvalue = (NSValue *)jsonItemValue;
                     const char *nsvalueCoding = nsvalue.objCType;
-                    const char *propertyModelCoding = propertyMapper->_typeEncodingString.UTF8String;
-                    if (nsvalueCoding && propertyModelCoding && 0 == strcmp(nsvalueCoding, propertyModelCoding)) {
+                    const char *propertyCoding = propertyMapper->_ivarEncodingString.UTF8String;
+                    if (nsvalueCoding && propertyCoding && (0 == strcmp(nsvalueCoding, propertyCoding))) {
                         ((void (*)(id, SEL, NSValue*))(void *) objc_msgSend)(model, setter, nsvalue);
                     }
                 }
@@ -1372,7 +1341,7 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
     XZHModelToJsonContext *ctx = (XZHModelToJsonContext *)context;
     __unsafe_unretained id object = (__bridge id)(ctx->model);
     if (!object || (id)kCFNull == object) return;
-    __unsafe_unretained NSMutableDictionary *objectDic = (__bridge NSMutableDictionary*)(ctx->objectDic);
+    __unsafe_unretained NSMutableDictionary *objectDic = (__bridge NSMutableDictionary*)(ctx->jsonDic);
     if (!objectDic) return;
     
     /**
@@ -1390,7 +1359,7 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
         dic_value = XZHConvertModelToAbleJSONSerialization(dic_value);
     } else {
         // Class、SEL
-        if (XZHTypeEncodingObjcClass == (_propertyMapper->_typeEncoding & XZHTypeEncodingDataTypeMask)) {
+        if (XZHTypeEncodingClass == (_propertyMapper->_typeEncoding & XZHTypeEncodingDataTypeMask)) {
             Class cls = ((Class (*)(id, SEL))(void *) objc_msgSend)(object, _propertyMapper->_property.getter);
             dic_value = (NULL != cls) ? NSStringFromClass(cls) : nil;
         } else if (XZHTypeEncodingSEL == (_propertyMapper->_typeEncoding & XZHTypeEncodingDataTypeMask)) {
@@ -1494,19 +1463,14 @@ static id XZHConvertModelToAbleJSONSerialization(__unsafe_unretained id object) 
     NSMutableDictionary *objectDic = [[NSMutableDictionary alloc] initWithCapacity:64];
     XZHModelToJsonContext ctx = {0};
     ctx.model = (__bridge void*)object;
-    ctx.objectDic = (__bridge void*)objectDic;
+    ctx.jsonDic = (__bridge void*)objectDic;
     CFDictionaryApplyFunction(classMapper->_jsonKeyPropertyMapperDic, XZHConvertModelToJSONApplierFunction, &ctx);
     return objectDic;
 }
 
-static void XZHJsonToModelApplierFunctionWithJSONDict(const void *jsonKey, const void *jsonItemValue, void *context) {
+static void XZHJsonToModelDicApplierFunction(const void *jsonKey, const void *jsonItemValue, void *context) {
     if (NULL == jsonKey || NULL == jsonItemValue || NULL == context) {return;}
     
-    /**
-     *  使用 __unsafe_unretained 修饰OC对象指针，减少runtime system自动进行retain操作影响代码运行速度
-     *  因为jsonDic、classMapper、propertyMapper、model都是由Context结构体实例持有
-     *  所以不必担心jsonDic、classMapper、propertyMapper、model 这些对象会被废弃的问题
-     */
     XZHJsonToModelContext *ctx = (XZHJsonToModelContext *)context;
     __unsafe_unretained id model = (__bridge id)(ctx->model);
     if (!model) {return;}
@@ -1514,22 +1478,14 @@ static void XZHJsonToModelApplierFunctionWithJSONDict(const void *jsonKey, const
     __unsafe_unretained XZHClassMapper *clsMapper = (__bridge XZHClassMapper*)(ctx->classMapper);
     if (!clsMapper || clsMapper->_totalMappedCount < 1) {return;}
     
-    /**
-     *  统一按照n:1的方式，将jsonItemValue设置给property
-     */
     __unsafe_unretained XZHPropertyMapper *propertyMapper = CFDictionaryGetValue(clsMapper->_jsonKeyPropertyMapperDic, jsonKey);
     while (propertyMapper) {
-        if (propertyMapper->_isSetterAccess) {
-            /**
-             *  直接遍历jsonDic.key与jsonDic.value设置到model.property
-             */
-            XZHSetFoundationObjectToProperty((__bridge __unsafe_unretained id)jsonItemValue, model, propertyMapper);
-        }
+        XZHSetFoundationObjectToProperty((__bridge __unsafe_unretained id)jsonItemValue, model, propertyMapper);
         propertyMapper = propertyMapper->_next;
     }
 }
 
-static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, void *context) {
+static void XZHJsonToModelArrayApplierFunction(const void *value, void *context) {
     if (NULL == value || NULL == context) {return;}
     XZHJsonToModelContext *ctx = (XZHJsonToModelContext *)context;
     __unsafe_unretained NSDictionary *jsonDic = (__bridge NSDictionary *)(ctx->jsonDic);
@@ -1537,30 +1493,18 @@ static void XZHJsonToModelApplierFunctionWithPropertyMappers(const void *value, 
 
     __unsafe_unretained XZHPropertyMapper *propertyMapper = (__bridge XZHPropertyMapper*)(value);
     while (propertyMapper) {
-        id jsonValue = nil;
-        
-        /**
-         *  按照property映射的jsonkey类型，从jsonDic中取出jsonItemValue
-         */
+        __unsafe_unretained id jsonValue = nil;
         if (XZHPropertyMappedToJsonKeyTypeKeyPath == propertyMapper->_mappedType) {
-            // property mapped to JsonKeyPath
             jsonValue = [jsonDic valueForKeyPath:propertyMapper->_mappedToKeyPath];
         } else if (XZHPropertyMappedToJsonKeyTypeKeyArray == propertyMapper->_mappedType) {
-            // property mapped to JsonKeyArray
             jsonValue = XZHGetValueFromDictionaryWithMultiJSONKeyArray(jsonDic, propertyMapper->_mappedToKeyArray);
         } else {
-            // property mapped to JsonKey
             jsonValue = [jsonDic objectForKey:propertyMapper->_mappedToSimpleKey];
         }
-        
-        /**
-         *  统一按照n:1的方式，将jsonItemValue设置给property
-         */
-        if (jsonValue && ((id)kCFNull) != jsonValue) {
-            __unsafe_unretained id model = (__bridge __unsafe_unretained id)(ctx->model);
-            if (!model || (id)kCFNull == model) {return;}
-            XZHSetFoundationObjectToProperty(jsonValue, model, propertyMapper);
-        }
+        if (!jsonValue) {break;}
+        if (((id)kCFNull) == jsonValue) {break;}
+        __unsafe_unretained id model = (__bridge __unsafe_unretained id)(ctx->model);
+        XZHSetFoundationObjectToProperty(jsonValue, model, propertyMapper);
         propertyMapper = propertyMapper->_next;
     }
 }
