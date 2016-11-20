@@ -22,6 +22,16 @@
 实体类
 
 ```objc
+@interface Cat : NSObject
+@property (nonatomic, assign) NSInteger cid;
+@property (nonatomic, copy) NSString *name;
+@end
+
+@interface Child : NSObject
+@property (nonatomic, assign) NSInteger cid;
+@property (nonatomic, copy) NSString *name;
+@end
+
 @interface Dog : NSObject
 @property (nonatomic, copy) NSString *name;
 @property (nonatomic, assign) NSInteger uid;
@@ -43,6 +53,9 @@
 @property (nonatomic, assign) NSInteger flag7;
 @property (nonatomic, assign) BOOL flag8;
 @end
+```
+
+```objc
 @implementation Dog
 + (NSDictionary *)xzh_customerMappings {
     return @{
@@ -78,6 +91,9 @@
              @"name" : @"c_name",
              };
 }
+@end
+
+@implementation Child
 @end
 ```
 
