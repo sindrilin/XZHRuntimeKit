@@ -406,15 +406,9 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
         CFMutableArrayRef keyPathPropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
         CFMutableArrayRef keyArrayPropertyMappers = CFArrayCreateMutable(CFAllocatorGetDefault(), 32, &kCFTypeArrayCallBacks);
         
-        NSMutableArray *allPropertyNames = [[NSMutableArray alloc] initWithArray:[clsModel.propertyMap allKeys]];
-        
-        /**
-         *  添加父类的所有property属性，
-         *  但是忽略对 NSObject/NSProxy 这两个跟类的解析，
-         *  NSObject/NSProxy.superclass == NULL 结束循环条件
-         */
+        NSMutableArray *allPropertyNames = [[NSMutableArray alloc] initWithCapacity:32];
         __unsafe_unretained XZHClassModel *clsTmpModel = clsModel;
-        while (clsTmpModel && (clsTmpModel.superClassModel != nil)) {
+        while (clsTmpModel) {
             for (__unsafe_unretained XZHPropertyModel *propertyModel in clsTmpModel.propertyMap.allValues) {
                 if (!propertyModel.name) {continue;}
                 if (!propertyModel.setter || !propertyModel.getter) {continue;}

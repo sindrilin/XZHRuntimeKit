@@ -9,31 +9,19 @@
 #import <Foundation/Foundation.h>
 
 /**
- *  深拷贝、不可变版本对象
+ *  提供objc对象的浅拷贝、深拷贝的功能
+ *  可以不再实现NSCopying协议
  */
-@protocol XZHDeepCopying <NSObject>
-- (instancetype)xzh_deepCopyWithNoZone;
-@end
+@interface NSObject (XZHCopying) 
 
 /**
- *  深拷贝、可变版本对象
+ *  浅拷贝对象
  */
-@protocol XZHDeepMutableCopying <NSObject>
-- (instancetype)xzh_deepMutableCopyWithNoZone;
-@end
-
-@interface NSObject (XZHCopying)
-
-///////////////////////////////////////////////////////////////////
-///// 浅拷贝、可变与不可变
-///////////////////////////////////////////////////////////////////
 - (instancetype)xzh_copy;
-- (instancetype)xzh_mutableCopy;
 
-///////////////////////////////////////////////////////////////////
-///// 深拷贝、可变与不可变
-///////////////////////////////////////////////////////////////////
+/**
+ *  深拷贝对象
+ */
 - (instancetype)xzh_deepCopy;
-- (instancetype)xzh_deepMutablCopy;
 
 @end

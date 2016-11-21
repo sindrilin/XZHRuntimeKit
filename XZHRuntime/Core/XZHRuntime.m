@@ -706,11 +706,11 @@ static dispatch_semaphore_t semaphore = NULL;
         _cls = cls;
         _isMeta = class_isMetaClass(cls);
         [self _parse];
-        
         /**
-         *  解析 super_objc_class，但是除去两个根类
-         *  - (1) NSObject 
+         *  添加父类的所有property属性，但是忽略如下Class时的解析:
+         *  - (1) NSObject
          *  - (2) NSProxy
+         *  - (3) Meta Class
          */
         _superCls = class_getSuperclass(cls);
         if (!class_isMetaClass(_superCls) && [NSObject class] != _superCls && [NSProxy class] != _superCls ) {

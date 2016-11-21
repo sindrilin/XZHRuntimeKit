@@ -7,10 +7,10 @@
 - (1) JSON 映射 Model （第一版结束）
 	- json to model
 	- model to json
-- (2) Copy （正在做ing）
+- (2) Copy （第一版结束）
 	- 浅拷贝
 	- 深拷贝
-- (3) Archive
+- (3) Archive （正在做doing）
 - (4) Protocol Observer (没开始)
 - (5) ORM	(没开始)
 - (6) Cache (没开始)

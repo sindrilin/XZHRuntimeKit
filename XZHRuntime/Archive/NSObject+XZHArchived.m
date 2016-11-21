@@ -10,4 +10,8 @@
 
 @implementation NSObject (XZHArchived)
 
++ (BOOL)supportsSecureCoding {
+    return YES;
+}
+
 @end
