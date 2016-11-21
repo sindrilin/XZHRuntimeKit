@@ -675,82 +675,8 @@ Property Model 包含:
 	- 解析属性的修饰符、Ivar的类型、数组属性中的对象类型 ....
 ```
 
-##JSON中的某一个数据项的类型
 
-```
-- null	>>> kCFNull、[NSNull null] 单例
-	- 需要放置崩溃
-	- 可以通过设置默认值
-- 非null
-	- NSString
-		- NSDate日期字符串
-		- @"1999"
-		- @"1999.111111"
-		- 其他字符串内容
-	- NSNumber
-		- BOOL
-		- char/int8_t
-		- unsigned char/uint8_t
-		- int/int32_t
-		- unsigned int/uint32_t
-		- float
-		- double
-		- short/int16_t
-		- unsigned short/uint16_t
-		- long
-		- unsigned long
-		- long long/int64_t
-		- unsigned long long/uint64_t
-	- 自定义NSObject子类
-	- NSArray
-	- NSDictionary
-	- NSSet
-	- struct 
-```
-
-##可以与NSNumber互转的数据类型
-
-基本数值类型
-
-```
-BOOL
-char
-double
-float
-int
-NSInteger
-long
-long long
-short
-unsigned char
-unsigned int
-NSUInteger
-unsigned long
-unsigned long long
-unsigned short
-```
-
-NSString类型
-
-- (1) 简单的数值字符串
-- (2) 日期字符串
-
-NSDate日期
-
-##JSON Key 与 `objc_property`的映射关系规则
-
-###jsonkey与`objc_property`的映射关系种类
-
-- (1) 1 property : 1 json key >>> 1 : 1
-
-- (2) 1 property : n json key >>> 1 : n
-
-- (3) n property : 1 json key >>> n : 1
-
-
-注意 `n : n` 这是不可能的情况，这样根本就无法解析json。
-
-###代码形式的具体某一个 `json key` 又分为三类:
+##`objc_property`可以映射的jsonkey的种类
 
 - (1) 简单的json key，不带路径也不是数组，就是一个简单的string
 
@@ -776,22 +702,37 @@ data.user.name
 @[@"name", @"user.name", @"uname"] 
 ```
 
-###当多个属性同时映射一个jsonkey的特殊情况处理
+##`objc_property`与jsonkey之间映射关系的类型
 
 ```
+- (1) 1 property : 1 json key >>> 1 : 1
+
+- (2) 1 property : n json key >>> 1 : n
+
+- (3) n property : 1 json key >>> n : 1
+```
+
+
+注意 `n : n` 这是不可能的情况，这样根本就无法解析json。
+
+
+##当多个属性同时映射一个jsonkey的特殊情况处理
+
+```
+属性 >>> jsonkey
 name1 >>> name
 name2 >>> name
 name3 >>> name
 ```
 
-并且这种情况不管jsonkey是 (1)、(2)、(3) 都是有可能存在的。
+根据jsonkey可能的三种形式，又细分为:
 
 - (1) 多个属性同时映射一个简单的`json key`
 - (2) 多个属性同时映射一个`json keyPath`
 - (3) 多个属性同时映射一个`json KeyArray`
 
 
-###多个不同属性映射同一个json key
+映射demo如下:
 
 ```
 eg1.
@@ -873,10 +814,8 @@ PropertyMapper
 		- simple key
 		- keyPath
 		- keyArray
-	- property
-		- <1property : 1jsonkey>
-		- <1property : njsonkey>
-		- <nproperty : 1jsonkey>
+	- property model
+		- objc_property
 ```
 
 比如说管理如下的映射关系:
@@ -892,15 +831,7 @@ PropertyMapper
 
 从代码结构上看:
 
-- (1) 三个重要的Class实例变量
-
-```objc
-Class                       _generacCls;        // 属性所属的实体类class
-Class                       _containerCls;      // 容器属性变量内部元素的Class
-Class                       _ivarClass;         // 当前属性变量的Class
-```
-
-- (2) 记录属性映射的jsonKey类型
+- (1) 记录属性映射的jsonKey类型
 
 ```objc
 NSString                    *_mappedToSimpleKey;
@@ -908,7 +839,7 @@ NSString                    *_mappedToKeyPath;
 NSArray                     *_mappedToManyKey;
 ```
 
-- (3) 如果出现多个属性映射同一个jsonkey，使用next指针串联起来
+- (2) 如果出现多个属性映射同一个jsonkey，使用next指针串联起来
 
 
 ```objc
@@ -919,8 +850,8 @@ XZHPropertyMapper         *_next;
 ##KVC不支持long double类型、c pointer(such as SEL/CoreFoundation object)
 
 ```
-1. long double 基本数值类型
-2. c 指针类型 
+1. long double 基本数值类型 >>> double
+2. c 指针类型 >>> NSValue进行包装
 	2.1 char*、int* .... （不包含结构体指针类型）
 	2.2 CoreFoundation object
 ```
@@ -1187,126 +1118,45 @@ static force_inline NSDate* XZHDateFromString(__unsafe_unretained NSString *data
 }
 ```
 
-##json dic >>> model 的大体逻辑
+##记录下JSON映射Model这一套代码的组织结构
 
-- (1) json dic
-
-```objc
-id json = @{
-                @"name" : @"dog001",
-                @"data" : @{
-                            @"uid" : @(100001),
-                            @"uid" : @"100001",
-                            @"uid" : @"nil",
-                            @"uid" : @"Nil",
-                            @"uid" : @"NULL",
-                            @"uid" : @"null",
-                            @"uid" : @"<null>",
-                            @"uid" : [NSNull null],
-                        },
-                @"p_age" : @"21",
-                @"user" : @{
-                        @"city" : @{
-                                @"address" : @"address4.....",
-                                },
-                        },
-                @"sex" : @"男",
-                @"animal" : @{
-                        @"cat" : @{
-                                @"c_id" : @"cat_hahahha",
-                                @"c_name" : @"cat_0000001",
-                                },
-                        },
-                };
+```c
+- XZHClassMapper
+	- XZHClassModel
+	- _jsonKeyPropertyMapperDic字典
+		- key >>>> mapped to jsonkey
+		- value >>>> XZHPropertyMapper
 ```
 
-- (2) 使用类方法解析json
 
-```objc
-Dog *dog = [Dog xzh_modelFromObject:json];
+```c
+- XZHPropertyMapper
+	- XZHPropertyModel
+		- objc_property
+		- type encodings
+	- id mapped to jsonkey
+		- (NSString*)simpley 
+		- (NSString*)keyPath
+		- (NSArray*)keyArray
+	- _next >>> 将映射同一个jsonkey的XZHPropertyMapper对象串联起来
 ```
 
-- (3) 生成`[Dog class]`对应的 ClassMapper
-	- 生成 ClassModel
-		- IvarModel
-		- PropertyModel
-		- MethodModel
-		- CategoryModel
-		- ProtocolModel
-	- 生成PropertyMapper记录所有的PropertyModel与jsonkey的映射关系
 
-- (3) 遍历`[Dog class]`对应的 ClassMapper->_jsonKeyMappedPropertyMapperDic 
-	- 取出jsonkey对应的jsonvalue
-	- 设置到model的属性值
-
-
-##嵌套单个NSObject类的处理逻辑
-
-```objc
-@interface Cat : NSObject
-@property (nonatomic, assign) NSInteger cid;
-@property (nonatomic, copy) NSString *name;
-@end
-
-@interface Dog : NSObject
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, assign) NSInteger uid;
-@property (nonatomic, assign) NSInteger age;
-@property (nonatomic, copy) NSString *address;
-@property (nonatomic, copy) NSString *sex1;
-@property (nonatomic, copy) NSString *sex2;
-@property (nonatomic, copy) NSString *sex3;
-@property (nonatomic, strong) Cat *cat;
-@end
+```c
+- XZHClassModel
+	- XZHPropertyModel Map
+		- key >>>> 属性名
+		- value >>>> XZHPropertyModel
+	- XZHMethodModel Map
+		- key >>>> SEL值
+		- value >>>> XZHMethodModel
+	- XZHCategoryModel Map
+		- key >>>> 分类名
+		- value >>>> XZHCategoryModel
+	- XZHProtocolModel Map
+		- key >>>> 协议名
+		- value >>>> XZHProtocolModel
 ```
-
-- (1) 首先按照`[Dog class]`解析json
-- (2) 当取到item json对应的类型是`[Cat class]`时
-- (3) 开始解析`[Cat class]`，生成`[Cat class]`对应的ClassMapper实例
-- (4) 然后将item json 按照`[Cat class]`对应的ClassMapper实例，进行设置
-
-所以并不是一开始解析 `[Dog class]` 时，就直接将内部的`[Cat class]`同时解析。
-
-也没有必要，因为有可能`[Cat class]`没有对应的json value。所以用到的时候再去解析并生成对应的ClassMapper实例。
-
-##嵌套NSObject类的处理逻辑
-
-```objc
-@interface Child : NSObject
-@property (nonatomic, assign) NSInteger cid;
-@property (nonatomic, copy) NSString *name;
-@end
-
-@interface Dog : NSObject
-@property (nonatomic, copy) NSString *name;
-@property (nonatomic, assign) NSInteger uid;
-@property (nonatomic, assign) NSInteger age;
-@property (nonatomic, copy) NSString *address;
-@property (nonatomic, copy) NSString *sex1;
-@property (nonatomic, copy) NSString *sex2;
-@property (nonatomic, copy) NSString *sex3;
-@property (nonatomic, strong) NSArray *childs;
-@end
-```
-
-- (1) 首先按照`[Dog class]`解析json
-- (2) 当取到item json对应的类型是`[NSArray class]`时
-- (3) 遍历 json array 中的每一个item json value
-- (4) 获取`PropertyMapper->_containerCls`对应的Array内部元素对象的Class
-- (5) 判断每一个item json value的类型
-	- `NSDictionary`
-	- `PropertyMapper->_containerCls`
-
-- (6) 如果是NSDictionary类型，则继续讲json item value 按照 `PropertyMapper->_containerCls` 进行json转model
-
-```objc
-id obj = [PropertyMapper->_containerCls _xzh_modelFromJSONDictionary:jsonItemValue];
-```
-	
-- (7) 如果已经是`PropertyMapper->_containerCls`直接加入数组
-
-- (8) 如果根本就不存在`PropertyMapper->_containerCls`，则直接当做NSArray对象存入model属性值
-
 
 ##json解析优化一、使用`__unsafe_unretained`修饰指针变量指向的`Objective-C`对象，提升代码的执行速度
 
@@ -1375,16 +1225,12 @@ void test2(__unsafe_unretained UnContext *ctx) {
 
 随着循环的次数越来越大，`test1()`与`test2()`两个函数执行所消耗的时间的区别也越来越大。
 
-但是需要注意，`__unsafe_unretained`修饰的指针变量不会在被指向对象废弃时而自动赋值为nil，就有可能引发一些崩溃，但是分情况:
+但是需要注意，`__unsafe_unretained`修饰的指针变量`不会`在被指向对象废弃时而自动赋值为nil，就有可能引发`崩溃`，但是分情况:
 
 - (1) `[nil sel:args]` 这种肯定是没问题的
 - (2) `[array addObject:nil];` 这种就会崩溃
 
-使用`__unsafe_unretained`的时候就需要特别的小心。参考YYModel的代码，发现只对象方法传入的参数使用`__unsafe_unretained`修饰，但是对象的实例变量、属性都不会使用`__unsafe_unretained`修饰。
-
-除非是不需要持有某一个实例变量对象，就使用`__unsafe_unretained`。
-
-总之使用的时候，搞清楚到底需不需要strong持有这个`Objective-c`对象。
+必须要搞清楚，这个对象的指针变量能不能使用`__unsafe_unretained`进行修饰的原则 >>> `这个对象在当前代码块生命周期内，不会被废弃掉`。
 
 ##json解析优化二、一个json object 与 该class的所有property mapper 之间的解析规则
 
@@ -1495,9 +1341,16 @@ if (jsonDic.count <= clsMapper->_totalMappedCount) {
 这样一来比所有情况，都按照实体类所有的属性都进行一次循环遍历解析所消耗的时间小多了。
 
 
-##json解析优化三、追求极致使用CoreFoundation来代替Foundation
+##json解析优化三、大量使用CoreFoundation来代替Foundation
 
-就没啥写了，就是一些CoreFoundation的c函数api使用。
+就是将一些NSArray、NSDictionary缓存CoreFoundation实例，尽量减少objc消息传递转发浪费的一部分时间吧。
+
+```c
+NSArray >>> CFArrayRef
+NSDictionary >>> CFDictionaryRef
+```
+
+起初我也不会使用这些CoreFoundation事例，因为都是基于c语言的函数调用。后来我发现一个诀窍，就是去参考GNUStep中开源代码，里面基本上都是c实现，就有很多的CoreFoundation使用代码....
 
 ##json解析优化四、XZHSetFoundationObjectToProperty()这个负责完成将一个Foundation对象设置到NSObject实体类对象的属性变量的c函数代码优化
 
