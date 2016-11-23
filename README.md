@@ -17,7 +17,7 @@
 
 把这些全部整合起来，就算是对自己这两年来搞iOS的交代吧，菜鸟成长记 . . . 
 
-###JSON 与 Model用法demo
+##JSON映射Model用法
 
 实体类
 
@@ -190,4 +190,6 @@ id jsonObj = [dog xzh_modelToJSONObject];
 
 然后是参考YYModel中部分使用了CoreFoundation，索性我就大量的使用了CoreFoundation，以及内联函数/c函数来完成一些关键的逻辑，尽量较少经历Objective-C的消息传递过程。
 
+
+[这部分实现原理小结](https://github.com/xiongzenghuidegithub/XZHRuntimeKit/wiki/JsonMappingModel%E9%83%A8%E5%88%86%E5%AE%9E%E7%8E%B0%E5%8E%9F%E7%90%86)
 
