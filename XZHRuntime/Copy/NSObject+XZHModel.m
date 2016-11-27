@@ -6,11 +6,11 @@
 //  Copyright © 2016年 com.cn.fql. All rights reserved.
 //
 
-#import "NSObject+XZHCopying.h"
+#import "NSObject+XZHModel.h"
 #import "XZHRuntime.h"
 #import <objc/message.h>
 
-@implementation NSObject (XZHCopying) 
+@implementation NSObject (XZHModel) 
 
 - (instancetype)xzh_copy {
     Class selfClass = [self class];
@@ -33,7 +33,7 @@
     if ([selfClass isSubclassOfClass:[NSData class]]) {return [self copy];}
     if ([selfClass isSubclassOfClass:[NSMutableData class]]) {return [self mutableCopy];}
     
-    // custom Class type
+    // Custom Class's all property
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
     __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:selfClass];
@@ -45,6 +45,8 @@
             clsModel = clsModel.superClassModel;
         }
     }
+    
+    // 遍历Class's所有的属性，依次赋值所有的Ivar值
     for (XZHPropertyModel *proModel in propertyModelArray) {
         SEL getter = proModel.getter;
         SEL setter = proModel.setter;
@@ -136,9 +138,6 @@
                     break;
             }
         } else if (XZHFoundationTypeNone != proModel.foundationType) {
-            /**
-             *  Foudation对象的浅拷贝处理
-             */
             id obj = ((id (*)(id, SEL))(void *) objc_msgSend)(self, getter);
             if (obj) {
                 ((void (*)(id, SEL, id))(void *) objc_msgSend)(newOne, setter, obj);
@@ -245,7 +244,7 @@
         return [mutableSet copy];
     }
     
-    // custom Class type
+    // Custom Class's all property
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
     __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:selfClass];
@@ -257,6 +256,8 @@
             clsModel = clsModel.superClassModel;
         }
     }
+    
+    // 遍历Class's所有的属性，依次继续拷贝所有的Ivar值
     for (XZHPropertyModel *proModel in propertyModelArray) {
         SEL getter = proModel.getter;
         SEL setter = proModel.setter;
@@ -348,10 +349,9 @@
                     break;
             }
         } else if (XZHFoundationTypeNone != proModel.foundationType) {
-            /**
-             *  Foudation对象的深拷贝处理
-             */
             id value = ((id (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+            if (!value) {break;}
+            
             switch (proModel.foundationType) {
                 case XZHFoundationTypeNSString: {
                     ((void (*)(id, SEL, NSString*))(void *) objc_msgSend)(newOne, setter, [value copy]);
@@ -455,6 +455,23 @@
         }
     }
     return newOne;
+}
+
+- (BOOL)xzh_isEqulToObject:(id)object {
+    if (!object) {return NO;}
+    if (object == self) {return YES;}
+    if ([object class] != [self class]) return NO;
+    //TODO: 所有的Ivar值比较，不相等返回NO
+    
+    return YES;
+}
+
+- (NSUInteger)xzh_hash {
+    return 0;
+}
+
+- (NSString *)xzh_description {
+    return nil;
 }
 
 @end

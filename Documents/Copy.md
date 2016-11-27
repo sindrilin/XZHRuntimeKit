@@ -45,7 +45,7 @@
 
 | 属性Ivar类型 | 浅拷贝 | 深拷贝 |
 | :-------------: |:-------------:| :-----:|
-| 基本类型 | 直接赋值 | 直接赋值 |
+| 基本类型（char、int、bool、float...） | 直接赋值 | 直接赋值 |
 | 非容器Foundation类型（NSString、NSNumber、NSURL、NSDate、NSDate....） | 直接发送copy/mutableCopy消息 | 直接发送copy/mutableCopy消息 |
 | 容器Foundation类型（NSArray、NSSet、NSDictionary） | 取出数组内对象，直接赋值 | 取出数组内对象，判断是否需要继续发送copy消息 |
 | 自定义NSObject类 | 创建一个新的自定义NSObject类对象，内部Ivar直接指向原来对象的Ivar | 创建一个新的自定义NSObject类对象，内部Ivar继续发送copy消息 |
