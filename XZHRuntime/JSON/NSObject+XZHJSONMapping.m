@@ -335,9 +335,9 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
     CFMutableArrayRef                  _keyPathPropertyMappers;
     CFMutableArrayRef                  _keyArrayPropertyMappers;
     
-    CFIndex                             _totalMappedCount;          //>>> 记录总的属于与jsonkey映射个数，注意:映射相同的jsonkey的次数只有一次
-    CFIndex                             _keyPathMappedCount;
-    CFIndex                             _keyArrayMappedCount;
+    CFIndex                            _totalMappedCount;
+    CFIndex                            _keyPathMappedCount;
+    CFIndex                            _keyArrayMappedCount;
 }
 
 @end
@@ -390,7 +390,7 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
          *  尝试使用__weak修饰，发现耗时比较多的，因为__weak指针在使用的时候，会被注册到AutoReleasePool中。
          *  __unsafe_unretained类似__weak，不会retain对象，但是不会像__weak修饰的对象会自动注册到AutoReleasePool，所以比__weak运行速度快。
          */
-        __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:cls];
+        __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:cls];
         
         clsMapper = [[XZHClassMapper alloc] init];
         clsMapper->_classModel = clsModel;

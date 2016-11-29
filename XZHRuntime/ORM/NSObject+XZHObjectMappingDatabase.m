@@ -1,13 +1,13 @@
 //
-//  NSObject+XZHDataBase.h
+//  NSObject+XZHDataBase.m
 //  XZHRuntimeDemo
 //
 //  Created by XiongZenghui on 16/10/18.
 //  Copyright © 2016年 com.cn.fql. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
+#import "NSObject+XZHObjectMappingDatabase.h"
 
-@interface NSObject (XZHDataBase)
+@implementation NSObject (XZHObjectMappingDatabase)
 
 @end

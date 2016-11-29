@@ -87,7 +87,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
     else if ([cls isSubclassOfClass:[NSMutableArray class]]) {return XZHFoundationTypeNSMutableArray;}
     else if ([cls isSubclassOfClass:[NSArray class]]) {return XZHFoundationTypeNSArray;}
     else if ([cls isSubclassOfClass:[NSMutableDictionary class]]) {return XZHFoundationTypeNSMutableDictionary;}
-    else if ([cls isSubclassOfClass:[NSDictionary class]]) {return XZHFoundationTypeNSMutableArray;}
+    else if ([cls isSubclassOfClass:[NSDictionary class]]) {return XZHFoundationTypeNSDictionary;}
     else if ([cls isSubclassOfClass:[NSMutableSet class]]) {return XZHFoundationTypeNSMutableSet;}
     else if ([cls isSubclassOfClass:[NSSet class]]) {return XZHFoundationTypeNSSet;}
     else if ([cls isSubclassOfClass:[NSDate class]]) {return XZHFoundationTypeNSDate;}
@@ -130,12 +130,12 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 }
 
 - (instancetype)initWithIvar:(Ivar)ivar {
-    if (!ivar) return nil;
+    if (NULL == ivar) return nil;
     if (self = [super init]) {
         _ivar = ivar;
-        _name = [NSString stringWithUTF8String:ivar_getName(ivar)];
-        _type = [NSString stringWithUTF8String:ivar_getTypeEncoding(ivar)];
-        _offset = ivar_getOffset(ivar);
+        _name = [NSString stringWithUTF8String:ivar_getName(_ivar)];
+        _type = [NSString stringWithUTF8String:ivar_getTypeEncoding(_ivar)];
+        _offset = ivar_getOffset(_ivar);
     }
     return self;
 }
@@ -173,7 +173,7 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 }
 
 - (instancetype)initWithProperty:(objc_property_t)property {
-    if (!property) {return nil;}
+    if (NULL == property) {return nil;}
     if (self = [super init]) {//start init
         _property = property;
         const char *c_name = property_getName(property);
@@ -461,12 +461,14 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                     break;
             }
         }
-        free(atts);
         
+        free(atts);
         if (_getter) {_isGetterAccess = YES;}
         if (_setter && ((XZHTypeEncodingPropertyReadonly != (_typeEncoding & XZHTypeEncodingPropertyMask)))) {_isSetterAccess = YES;}
         else {_isSetterAccess = NO;}
+        
     }//end init
+    
     return self;
 }
 
@@ -632,20 +634,15 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 static dispatch_semaphore_t semaphore = NULL;
 @implementation XZHClassModel {
     @package
-    Class __unsafe_unretained _cls;     //解析的objc_class实例
-    BOOL _isNeedUpdate;                 //标记是否需要重新解析
+    BOOL _isNeedUpdate;    //标记是否需要重新解析
 }
 
-+ (instancetype)instanceWithClass:(Class)cls {
++ (instancetype)classModelWithClass:(Class)cls {
+    if (Nil == cls) {return nil;}
     
-    /**
-     *  类本身的解析缓存
-     */
-    static CFMutableDictionaryRef classCache;
-    /**
-     *  元类的解析缓存
-     */
-    static CFMutableDictionaryRef metaClsCache;
+    static CFMutableDictionaryRef classCache;//类本身的解析缓存
+    static CFMutableDictionaryRef metaClsCache;//元类的解析缓存
+    
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         classCache = CFDictionaryCreateMutable(CFAllocatorGetDefault(), 0,  &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -653,69 +650,47 @@ static dispatch_semaphore_t semaphore = NULL;
         semaphore = dispatch_semaphore_create(1);
     });
 
+    // 使用cls查询缓存，是否已经存在解析好的ClassModel对象
     XZHClassModel *clsModel = nil;
-    
-    // 区分两种类型方法: 1)对象方法 2)类方法
     BOOL isMeta = class_isMetaClass(cls);
-    if (isMeta) {
-        // 类方法
-        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-        clsModel = CFDictionaryGetValue(metaClsCache, (__bridge const void *)(cls));
-        dispatch_semaphore_signal(semaphore);
-    } else {
-        // 对象方法
-        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-        clsModel = CFDictionaryGetValue(classCache, (__bridge const void *)(cls));
-        dispatch_semaphore_signal(semaphore);
-    }
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    clsModel = CFDictionaryGetValue(isMeta ? metaClsCache : classCache, (__bridge const void *)(cls));
+    dispatch_semaphore_signal(semaphore);
     
-    if (clsModel) {// 存在缓存的解析
-        if ([clsModel isNeedUpdate]) {
-            [clsModel _parse];//重新进行解析
-            if (isMeta) {
-                dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-                CFDictionarySetValue(classCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
-                dispatch_semaphore_signal(semaphore);
-            } else {
-                dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-                CFDictionarySetValue(metaClsCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
-                dispatch_semaphore_signal(semaphore);
-            }
+    if (clsModel) {
+        // 存在ClassModel对象缓存，并且需要重新解析，然后缓存
+        if (clsModel->_isNeedUpdate) {
+            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);//lock
+            [clsModel _parse];
+            CFDictionarySetValue(clsModel.isMeta ? metaClsCache : classCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
+            dispatch_semaphore_signal(semaphore);//unlock
         }
-    } else {// 不存在缓存的解析
+    } else {
+        // 不存在ClassModel对象缓存，直接进行解析，然后缓存
         clsModel = [[XZHClassModel alloc] initWithClass:cls];
-        if (isMeta) {
-            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-            CFDictionarySetValue(classCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
-            dispatch_semaphore_signal(semaphore);
-        } else {
-            dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-            CFDictionarySetValue(metaClsCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
-            dispatch_semaphore_signal(semaphore);
-        }
-
+        if (!clsModel) {return nil;}
+        
+        dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);//lock
+        CFDictionarySetValue(isMeta ? metaClsCache : classCache, (__bridge const void *)(cls), (__bridge const void *)(clsModel));
+        dispatch_semaphore_signal(semaphore);//unlock
     }
     return clsModel;
 }
 
-/**
- *  解析传入的Class
- */
+// 该函数可以在任意线程上执行，创建内部所有子对象，只需要最终设置到缓存dic时，处理多线程同步
 - (instancetype)initWithClass:(Class)cls {
+    if (Nil == cls) {return nil;}
     if (self = [super init]) {
+        // cur class
         _cls = cls;
+        _clsName = NSStringFromClass(cls);
         _isMeta = class_isMetaClass(cls);
+        _foundationType = XZHGetClassFoundationType(cls);
         [self _parse];
-        /**
-         *  添加父类的所有property属性，但是忽略如下Class时的解析:
-         *  - (1) NSObject
-         *  - (2) NSProxy
-         *  - (3) Meta Class
-         */
+        
+        // super class
         _superCls = class_getSuperclass(cls);
-        if (!class_isMetaClass(_superCls) && [NSObject class] != _superCls && [NSProxy class] != _superCls ) {
-            _superClassModel = [[XZHClassModel alloc] initWithClass:_superCls];
-        }
+        _superClassModel = [XZHClassModel classModelWithClass:_superCls];
     }
     return self;
 }
@@ -723,6 +698,16 @@ static dispatch_semaphore_t semaphore = NULL;
 - (void)_parse {
     
     //clear datas
+    NSDictionary *tmpPropertyMap = [[NSDictionary alloc] initWithDictionary:_propertyMap];
+    NSDictionary *tmpIvarMap = [[NSDictionary alloc] initWithDictionary:_ivarMap];
+    NSDictionary *tmpMethodMap = [[NSDictionary alloc] initWithDictionary:_methodMap];
+    NSDictionary *tmpProtocolMap = [[NSDictionary alloc] initWithDictionary:_protocolMap];
+    dispatch_async(dispatch_get_global_queue(0, 0), ^{
+        [tmpPropertyMap count];
+        [tmpIvarMap count];
+        [tmpMethodMap count];
+        [tmpProtocolMap count];
+    });
     _propertyMap = nil;
     _ivarMap = nil;
     _methodMap = nil;
@@ -731,51 +716,59 @@ static dispatch_semaphore_t semaphore = NULL;
     // all property
     unsigned int pNum = 0;
     objc_property_t *properties = class_copyPropertyList(_cls, &pNum);
-    NSMutableDictionary *propertyMap = [[NSMutableDictionary alloc] initWithCapacity:pNum];
-    for (int i = 0; i < pNum; i++) {
-        objc_property_t property = properties[i];
-        XZHPropertyModel *proM = [[XZHPropertyModel alloc] initWithProperty:property];
-        if (proM) {[propertyMap setObject:proM forKey:proM.name];}
+    if (properties) {
+        NSMutableDictionary *propertyMap = [[NSMutableDictionary alloc] initWithCapacity:pNum];
+        for (int i = 0; i < pNum; i++) {
+            objc_property_t property = properties[i];
+            XZHPropertyModel *proM = [[XZHPropertyModel alloc] initWithProperty:property];
+            if (proM) {[propertyMap setObject:proM forKey:(proM.name != nil)?proM.name:@""];}
+        }
+        _propertyMap = [propertyMap copy];
+        free(properties);
+        properties = NULL;
     }
-    _propertyMap = [propertyMap copy];
-    free(properties);
-    properties = NULL;
     
     // all ivar
     unsigned int iNum = 0;
     Ivar *ivars = class_copyIvarList(_cls, &iNum);
-    NSMutableDictionary *ivarMap = [[NSMutableDictionary alloc] initWithCapacity:iNum];
-    for (int i = 0; i < pNum; i++) {
-        XZHIvarModel *ivarM = [[XZHIvarModel alloc] initWithIvar:ivars[i]];
-        if (ivarM) {[ivarMap setObject:ivarM forKey:ivarM.name];}
+    if (ivars) {
+        NSMutableDictionary *ivarMap = [[NSMutableDictionary alloc] initWithCapacity:iNum];
+        for (int i = 0; i < iNum; i++) {
+            XZHIvarModel *ivarM = [[XZHIvarModel alloc] initWithIvar:ivars[i]];
+            if (ivarM) {[ivarMap setObject:ivarM forKey:(ivarM.name != nil)?ivarM.name:@""];}
+        }
+        _ivarMap = [ivarMap copy];
+        free(ivars);
+        ivars = NULL;
     }
-    _ivarMap = [ivarMap copy];
-    free(ivars);
-    ivars = NULL;
     
     // all method
     unsigned int mNum = 0;
     Method *methods = class_copyMethodList(_cls, &mNum);
-    NSMutableDictionary *methodMap = [[NSMutableDictionary alloc] initWithCapacity:mNum];
-    for (int i = 0; i < pNum; i++) {
-        XZHMethodModel *m = [[XZHMethodModel alloc] initWithMethod:methods[i]];
-        if (m) {[methodMap setObject:m forKey:m.selString];}
+    if (methods) {
+        NSMutableDictionary *methodMap = [[NSMutableDictionary alloc] initWithCapacity:mNum];
+        for (int i = 0; i < mNum; i++) {
+            XZHMethodModel *m = [[XZHMethodModel alloc] initWithMethod:methods[i]];
+            if (m) {[methodMap setObject:m forKey:(m.selString != nil)?m.selString:@""];}
+        }
+        _methodMap = [methodMap copy];
+        free(methods);
+        methods = NULL;
     }
-    _methodMap = [methodMap copy];
-    free(methods);
-    methods = NULL;
     
     // all protocol
     unsigned int proNum = 0;
     Protocol *__unsafe_unretained*protocols = class_copyProtocolList(_cls, &proNum);
-    NSMutableDictionary *protocolMap = [[NSMutableDictionary alloc] initWithCapacity:proNum];
-    for (int i = 0; i < proNum; i++) {
-        XZHProtocolModel *pM = [[XZHProtocolModel alloc] initWithProtocol:protocols[i]];
-        if (pM) {[protocolMap setObject:pM forKey:pM.name];}
+    if (protocols) {
+        NSMutableDictionary *protocolMap = [[NSMutableDictionary alloc] initWithCapacity:proNum];
+        for (int i = 0; i < proNum; i++) {
+            XZHProtocolModel *pM = [[XZHProtocolModel alloc] initWithProtocol:protocols[i]];
+            if (pM) {[protocolMap setObject:pM forKey:(pM.name != nil)?pM.name:@""];}
+        }
+        _protocolMap = [protocolMap copy];
+        free(protocols);
+        protocols = NULL;
     }
-    _protocolMap = [protocolMap copy];
-    free(protocols);
-    protocols = NULL;
     
     //set default value avoid crash
     if (!_propertyMap) {_propertyMap = @{};}
@@ -788,13 +781,7 @@ static dispatch_semaphore_t semaphore = NULL;
 }
 
 - (void)setNeedUpdate {
-    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
     _isNeedUpdate = YES;
-    dispatch_semaphore_signal(semaphore);
-}
-
-- (BOOL)isNeedUpdate {
-    return _isNeedUpdate;
 }
 
 - (NSString *)description {
@@ -837,10 +824,10 @@ id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block) {
     return (nil != block) ? block() : nil;
 }
 
+/**
+ *  只判断类方法是否实现
+ */
 BOOL XZHClassRespondsToSelector(Class cls, SEL sel) {
-    /**
-     *  只判断类方法是否实现
-     */
     Class meta = object_getClass(cls);
     if (class_isMetaClass(meta)) {
         return class_respondsToSelector(meta, sel);

@@ -17,17 +17,29 @@
  */
 @interface NSObject (XZHModel)
 
-// 浅拷贝对象
-- (instancetype)xzh_copy;
+/**
+ *  拷贝对象，可以不再需要实现NSCopying协议
+ *  - 浅拷贝
+ *  - 深拷贝
+ */
 
-// 深拷贝对象
+- (instancetype)xzh_copy;
 - (instancetype)xzh_deepCopy;
 
+/**
+ *  对象等他性判断
+ */
 - (BOOL)xzh_isEqulToObject:(id)object;
 
+/**
+ *  对象的hash值
+ *  hash = ivar1 ^ ivar2 ^ ivar3 ^ ....;
+ */
 - (NSUInteger)xzh_hash;
 
+/**
+ *  对象的desciption描述字符串值
+ */
 - (NSString *)xzh_description;
-
 
 @end

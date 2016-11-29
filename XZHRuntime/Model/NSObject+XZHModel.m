@@ -10,6 +10,172 @@
 #import "XZHRuntime.h"
 #import <objc/message.h>
 
+static NSString *const kSpaceString = @"    ";//4个空格，代替\t
+static const NSInteger KSpaceStringLen = 4;
+
+/**
+ *  处理当前字符串的缩进距离, indent标示缩进的层次
+ *  主要控制缩进后换行的最后一个结束符（ }、] ）
+ */
+static NSMutableString *XZHDescriptionAddIndent(NSMutableString *desc, NSUInteger indent) {
+    NSUInteger max = desc.length;
+    
+    // 在desc中的 \n 后面插入 kSpaceString表示的四个空格符，来代替\t的作用
+    for (NSUInteger i = 0; i < max; i++) {
+        unichar c = [desc characterAtIndex:i];
+        if (c == '\n') {
+            for (NSUInteger j = 0; j < indent; j++) {
+                [desc insertString:kSpaceString atIndex:i + 1];
+            }
+            i += indent * KSpaceStringLen;
+            max += indent * KSpaceStringLen;
+        }
+    }
+    return desc;
+}
+
+
+static NSString* XZHGetObjectDescription(NSObject *object) {
+    if (!object) {return @"<nil>";}
+    if ((id)kCFNull == object) {return @"<null>";}
+    if (![object isKindOfClass:[NSObject class]]) {return [NSString stringWithFormat:@"%@", object];}
+    
+    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[object class]];
+    switch (clsModel.foundationType) {
+        case XZHFoundationTypeNSString:
+        case XZHFoundationTypeNSMutableString: {
+            return [NSString stringWithFormat:@"(NSString *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSNumber:
+        case XZHFoundationTypeNSDecimalNumber: {
+            return [NSString stringWithFormat:@"(NSNumber *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSDate: {
+            return [NSString stringWithFormat:@"(NSDate *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSURL: {
+            return [NSString stringWithFormat:@"(NSURL *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSData:
+        case XZHFoundationTypeNSMutableData: {
+            return [NSString stringWithFormat:@"(NSData *)%@", [object description]];
+        }
+            break;
+        case XZHFoundationTypeNSValue: {
+            return [NSString stringWithFormat:@"(NSValue *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSNull: {
+            return [NSString stringWithFormat:@"(NSNull *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSBlock: {
+            return [NSString stringWithFormat:@"(NSBlock *)%@", object];
+        }
+            break;
+        case XZHFoundationTypeNSArray :
+        case XZHFoundationTypeNSMutableArray: {
+            NSArray *array = (NSArray*)object;
+            NSMutableString *desc = [NSMutableString new];
+            if (array.count == 0) {
+                return [desc stringByAppendingString:@"\t[]"];
+            } else {
+                [desc appendFormat:@"[\n"];
+                for (NSUInteger i = 0, max = array.count; i < max; i++) {
+                    NSObject *obj = array[i];
+                    [desc appendFormat:@"%@", kSpaceString];
+                    [desc appendString:XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
+                    [desc appendString:(i + 1 == max) ? @"\n" : @",\n"];
+                }
+                [desc appendString:@"]"];
+                return desc;
+            }
+
+        }
+            break;
+        case XZHFoundationTypeNSSet :
+        case XZHFoundationTypeNSMutableSet: {
+            NSArray *array = [(NSSet*)object allObjects];
+            NSMutableString *desc = [NSMutableString new];
+            if (array.count == 0) {
+                return [desc stringByAppendingString:@"\t[]"];
+            } else {
+                [desc appendFormat:@"[\n"];
+                for (NSUInteger i = 0, max = array.count; i < max; i++) {
+                    NSObject *obj = array[i];
+                    [desc appendFormat:@"%@", kSpaceString];
+                    [desc appendString:XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
+                    [desc appendString:(i + 1 == max) ? @"\n" : @",\n"];
+                }
+                [desc appendString:@"]"];
+                return desc;
+            }
+            
+        }
+        case XZHFoundationTypeNSDictionary :
+        case XZHFoundationTypeNSMutableDictionary: {
+            NSDictionary *dic = (NSDictionary*)object;
+            __block NSUInteger count = -1;
+            NSUInteger max = dic.count;
+            NSMutableString *desc = [NSMutableString new];
+            if (dic.count == 0) {
+                return [desc stringByAppendingString:@"\t{}"];
+            } else {
+                [desc appendFormat:@"{\n"];
+                [dic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
+                    count++;
+                    [desc appendFormat:@"%@", kSpaceString];
+                    NSString *string = [NSString stringWithFormat:@"%@ = %@", key, XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
+                    [desc appendString:string];
+                    [desc appendString:(count + 1 == max) ? @"\n" : @",\n"];
+                }];
+                [desc appendString:@"}"];
+                return desc;
+            }
+        }
+            break;
+        case XZHFoundationTypeCustomer: {
+            NSMutableString *desc = [[NSMutableString alloc] initWithCapacity:100];
+            if (0 == clsModel.propertyMap.count) {return [NSString stringWithFormat:@"<%@ : %p>   {}", [object class], object];}
+            
+            [desc appendFormat:@"<%@ : %p>%@{\n", [object class], object, kSpaceString];
+            NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
+            while (clsModel) {
+                for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
+                    if (!proModel.name) {continue;}
+                    if (!proModel.setter || !proModel.getter) {continue;}
+                    [propertyModelArray addObject:proModel];
+                    clsModel = clsModel.superClassModel;
+                }
+            }
+            for (NSInteger i = 0,max = propertyModelArray.count; i < max; i++) {
+                __unsafe_unretained XZHPropertyModel *proModel = propertyModelArray[i];
+                [desc appendFormat:@"%@", kSpaceString];
+                NSString *ivarName = [NSString stringWithFormat:@"%@", proModel.name];
+                SEL getter = proModel.getter;
+                if (NULL == getter) {continue;}
+                id value = nil;
+                @try {
+                    value = [object valueForKey:ivarName];
+                } @catch (NSException *exception) {}
+                NSString *string = [NSString stringWithFormat:@"%@ = %@", ivarName, XZHDescriptionAddIndent(XZHGetObjectDescription(value).mutableCopy, 1)];
+                [desc appendString:string];
+                [desc appendString:(propertyModelArray.count + 1 == max) ? @"\n" : @",\n"];
+            }
+            [desc appendString:@"}"];
+            return desc.copy;
+        }
+            break;
+        default:
+            break;
+    }
+    return @"";
+}
+
 @implementation NSObject (XZHModel) 
 
 - (instancetype)xzh_copy {
@@ -36,7 +202,7 @@
     // Custom Class's all property
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
-    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:selfClass];
+    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[self class]];
     while (clsModel) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
@@ -247,7 +413,7 @@
     // Custom Class's all property
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
-    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel instanceWithClass:selfClass];
+    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:selfClass];
     while (clsModel) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
@@ -459,19 +625,269 @@
 
 - (BOOL)xzh_isEqulToObject:(id)object {
     if (!object) {return NO;}
-    if (object == self) {return YES;}
     if ([object class] != [self class]) return NO;
-    //TODO: 所有的Ivar值比较，不相等返回NO
+    if ([object xzh_hash] != [self xzh_hash]) return NO;
     
+    NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
+    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[self class]];
+    while (clsModel) {
+        for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
+            if (!proModel.name) {continue;}
+            if (!proModel.setter || !proModel.getter) {continue;}
+            [propertyModelArray addObject:proModel];
+            clsModel = clsModel.superClassModel;
+        }
+    }
+    for (XZHPropertyModel *proM in propertyModelArray) {
+        SEL getter = proM.getter;
+        if (proM.isCNumber) {
+            switch (proM.typeEncoding & XZHTypeEncodingDataTypeMask) {
+                case XZHTypeEncodingChar: {//char、int8_t
+                    char num1 = ((char (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    char num2 = ((char (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedChar: {//unsigned char、uint8_t
+                    unsigned char num1 = ((unsigned char (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    unsigned char num2 = ((unsigned char (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingBOOL: {
+                    BOOL num1 = ((BOOL (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    BOOL num2 = ((BOOL (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingShort: {//short、int16_t、
+                    short num1 = ((short (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    short num2 = ((short (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedShort: {//unsigned short、uint16_t、
+                    unsigned short num1 = ((unsigned short (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    unsigned short num2 = ((unsigned short (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingInt: {//int、int32_t、
+                    int num1 = ((int (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    int num2 = ((int (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedInt: {//unsigned int、uint32_t
+                    unsigned int num1 = ((unsigned int (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    unsigned int num2 = ((unsigned int (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingFloat: {
+                    float num1 = ((float (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    float num2 = ((float (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingLong32: {
+                    long num1 = ((long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    long num2 = ((long (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingLongLong: {
+                    long long num1 = ((long long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    long long num2 = ((long long (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingLongDouble: {
+                    double num1 = ((long double (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    double num2 = ((long double (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedLong: {
+                    unsigned long num1 = ((unsigned long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    unsigned long num2 = ((unsigned long (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedLongLong: {
+                    unsigned long long num1 = ((unsigned long long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    unsigned long long num2 = ((unsigned long long (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                case XZHTypeEncodingDouble: {
+                    double num1 = ((double (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    double num2 = ((double (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+                    if (num1 != num2) return NO;
+                }
+                    break;
+                default:
+                    break;
+            }
+        } else if (XZHFoundationTypeNone != proM.foundationType) {
+            id obj1 = ((id (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+            id obj2 = ((id (*)(id, SEL))(void *) objc_msgSend)(object, getter);
+            if (XZHFoundationTypeCustomer == proM.foundationType) {
+                if (NO == [obj1 xzh_isEqulToObject:obj2]) {
+                    return NO;
+                }
+            } else {
+                switch (proM.foundationType) {
+                    case XZHFoundationTypeNSString:
+                    case XZHFoundationTypeNSMutableString: {
+                        if (NO == [obj1 isEqualToString:obj2]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSNumber:
+                    case XZHFoundationTypeNSDecimalNumber: {
+                        if (NO == [obj1 isEqualToNumber:obj2]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSURL: {
+                        if (NO == [[obj1 absoluteString] isEqualToString:[obj2 absoluteString]]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSArray:
+                    case XZHFoundationTypeNSMutableArray: {
+                        if (NO == [obj1 isEqualToArray:obj2]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSSet:
+                    case XZHFoundationTypeNSMutableSet: {
+                        if (NO == [obj1 isEqualToSet:obj2]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSDictionary:
+                    case XZHFoundationTypeNSMutableDictionary: {
+                        if (NO == [obj1 isEqualToDictionary:obj2]) {return NO;}
+                        break;
+                    }
+                    case XZHFoundationTypeNSValue: {
+                        if (NO == [obj1 isEqualToValue:obj2]) {return NO;}
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
+        }
+    }
     return YES;
 }
 
 - (NSUInteger)xzh_hash {
-    return 0;
+    if ((id)kCFNull == self) {return [self hash];}
+    __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[self class]];
+    if (clsModel.foundationType != XZHFoundationTypeNone && clsModel.foundationType != XZHFoundationTypeCustomer) {return [self hash];}
+    
+    NSUInteger _hash = 0;
+    NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
+    while (clsModel) {
+        for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
+            if (!proModel.name) {continue;}
+            if (!proModel.setter || !proModel.getter) {continue;}
+            [propertyModelArray addObject:proModel];
+            clsModel = clsModel.superClassModel;
+        }
+    }
+    if (0 == propertyModelArray.count) {return (long)((__bridge void *)self);}
+    
+    for (XZHPropertyModel *proM in propertyModelArray) {
+        SEL getter = proM.getter;
+        if (proM.isCNumber) {
+            switch (proM.typeEncoding & XZHTypeEncodingDataTypeMask) {
+                case XZHTypeEncodingChar: {//char、int8_t
+                    char num1 = ((char (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedChar: {//unsigned char、uint8_t
+                    unsigned char num1 = ((unsigned char (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingBOOL: {
+                    BOOL num1 = ((BOOL (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingShort: {//short、int16_t、
+                    short num1 = ((short (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedShort: {//unsigned short、uint16_t、
+                    unsigned short num1 = ((unsigned short (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingInt: {//int、int32_t、
+                    int num1 = ((int (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedInt: {//unsigned int、uint32_t
+                    unsigned int num1 = ((unsigned int (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingFloat: {
+                    float num1 = ((float (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= (int)num1;
+                }
+                    break;
+                case XZHTypeEncodingLong32: {
+                    long num1 = ((long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingLongLong: {
+                    long long num1 = ((long long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingLongDouble: {
+                    double num1 = ((long double (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= (int)num1;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedLong: {
+                    unsigned long num1 = ((unsigned long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingUnsignedLongLong: {
+                    unsigned long long num1 = ((unsigned long long (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= num1;
+                }
+                    break;
+                case XZHTypeEncodingDouble: {
+                    double num1 = ((double (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+                    _hash ^= (int)num1;
+                }
+                    break;
+                default:
+                    break;
+            }
+        } else if (XZHFoundationTypeNone != proM.foundationType) {
+            id obj1 = ((id (*)(id, SEL))(void *) objc_msgSend)(self, getter);
+            if (XZHFoundationTypeCustomer == proM.foundationType) {
+                _hash ^= [obj1 xzh_hash];
+            } else {
+                _hash ^= [obj1 hash];
+            }
+        }
+    }
+    return _hash;
 }
 
 - (NSString *)xzh_description {
-    return nil;
+    return XZHGetObjectDescription(self);
 }
 
 @end

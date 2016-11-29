@@ -369,19 +369,23 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 
 @interface XZHClassModel : NSObject
 @property (nonatomic, assign, readonly) BOOL isMeta;
+@property (nonatomic, assign, readonly) Class cls;
+@property (nonatomic, assign, readonly) NSString *clsName;
 @property (nonatomic, strong, readonly) Class superCls;
-@property (nonatomic, strong, readonly) XZHClassModel *superClassModel;
 @property (nonatomic, copy, readonly)   NSString *name;
 @property (nonatomic, strong, readonly) NSDictionary<NSString*, XZHPropertyModel*> *propertyMap;// 属性名 : PropertyModel
 @property (nonatomic, strong, readonly) NSDictionary<NSString*, XZHIvarModel*> *ivarMap;// 实例变量名 : IvarModel
 @property (nonatomic, strong, readonly) NSDictionary<NSString*, XZHMethodModel*> *methodMap;// 方法SEL : MethodModel
 @property (nonatomic, strong, readonly) NSDictionary<NSString*, XZHProtocolModel*> *protocolMap;// 协议名 : ProtocolModel
+@property (nonatomic, assign, readonly) XZHFoundationType foundationType;
+
+@property (nonatomic, strong, readonly) XZHClassModel *superClassModel;
 
 /**
  *  创建/查询缓存解析Class >>> ClassModel对象
  *  @param cls          objc_class实例
  */
-+ (instancetype)instanceWithClass:(Class)cls;
++ (instancetype)classModelWithClass:(Class)cls;
 
 /**
  *  如果是通过runtime函数添加了Property，则找到对应的ClassModel对象调用这个方法
@@ -389,6 +393,5 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
  */
 - (void)setNeedUpdate;
 
-- (BOOL)isNeedUpdate;
 - (BOOL)isEqualToClassModel:(XZHClassModel *)clsModel;
 @end
