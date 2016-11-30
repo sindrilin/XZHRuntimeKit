@@ -4,14 +4,10 @@
 
 主要是将一些常用的基于runtime的代码整合起来:
 
-- (1) JSON 映射 Model （第一版结束）
-	- json to model
-	- model to json
-- (2) Copy （第一版结束）
-	- 浅拷贝
-	- 深拷贝
-- (3) Archive （正在做doing）
-- (4) Protocol Observer (没开始)
+- (1) JSON 映射 Model （结束）
+- (2) Copy （结束）
+- (3) Archive （结束）
+- (4) Protocol Observer (doing)
 - (5) ORM	(没开始)
 - (6) Cache (没开始)
 

@@ -408,7 +408,7 @@ static void XZHConvertModelToJSONApplierFunction(const void *mappedToKey, const 
         
         NSMutableArray *allPropertyNames = [[NSMutableArray alloc] initWithCapacity:32];
         __unsafe_unretained XZHClassModel *clsTmpModel = clsModel;
-        while (clsTmpModel) {
+        while (clsTmpModel && clsModel.superCls != nil) {
             for (__unsafe_unretained XZHPropertyModel *propertyModel in clsTmpModel.propertyMap.allValues) {
                 if (!propertyModel.name) {continue;}
                 if (!propertyModel.setter || !propertyModel.getter) {continue;}

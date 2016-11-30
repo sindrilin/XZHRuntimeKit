@@ -82,12 +82,12 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
             NSArray *array = (NSArray*)object;
             NSMutableString *desc = [NSMutableString new];
             if (array.count == 0) {
-                return [desc stringByAppendingString:@"\t[]"];
+                return [desc stringByAppendingString:@"[]"];
             } else {
                 [desc appendFormat:@"[\n"];
                 for (NSUInteger i = 0, max = array.count; i < max; i++) {
                     NSObject *obj = array[i];
-                    [desc appendFormat:@"%@", kSpaceString];
+                    [desc appendFormat:@"%@", kSpaceString];// \t
                     [desc appendString:XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
                     [desc appendString:(i + 1 == max) ? @"\n" : @",\n"];
                 }
@@ -102,12 +102,12 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
             NSArray *array = [(NSSet*)object allObjects];
             NSMutableString *desc = [NSMutableString new];
             if (array.count == 0) {
-                return [desc stringByAppendingString:@"\t[]"];
+                return [desc stringByAppendingString:@"[]"];
             } else {
                 [desc appendFormat:@"[\n"];
                 for (NSUInteger i = 0, max = array.count; i < max; i++) {
                     NSObject *obj = array[i];
-                    [desc appendFormat:@"%@", kSpaceString];
+                    [desc appendFormat:@"%@", kSpaceString];// \t
                     [desc appendString:XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
                     [desc appendString:(i + 1 == max) ? @"\n" : @",\n"];
                 }
@@ -123,12 +123,12 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
             NSUInteger max = dic.count;
             NSMutableString *desc = [NSMutableString new];
             if (dic.count == 0) {
-                return [desc stringByAppendingString:@"\t{}"];
+                return [desc stringByAppendingString:@"{}"];
             } else {
                 [desc appendFormat:@"{\n"];
                 [dic enumerateKeysAndObjectsUsingBlock:^(id  _Nonnull key, id  _Nonnull obj, BOOL * _Nonnull stop) {
                     count++;
-                    [desc appendFormat:@"%@", kSpaceString];
+                    [desc appendFormat:@"%@", kSpaceString];// \t
                     NSString *string = [NSString stringWithFormat:@"%@ = %@", key, XZHDescriptionAddIndent(XZHGetObjectDescription(obj).mutableCopy, 1)];
                     [desc appendString:string];
                     [desc appendString:(count + 1 == max) ? @"\n" : @",\n"];
@@ -144,7 +144,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
             
             [desc appendFormat:@"<%@ : %p>%@{\n", [object class], object, kSpaceString];
             NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
-            while (clsModel) {
+            while (clsModel && clsModel.superCls != nil) {
                 for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
                     if (!proModel.name) {continue;}
                     if (!proModel.setter || !proModel.getter) {continue;}
@@ -154,7 +154,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
             }
             for (NSInteger i = 0,max = propertyModelArray.count; i < max; i++) {
                 __unsafe_unretained XZHPropertyModel *proModel = propertyModelArray[i];
-                [desc appendFormat:@"%@", kSpaceString];
+                [desc appendFormat:@"%@", kSpaceString];// \t
                 NSString *ivarName = [NSString stringWithFormat:@"%@", proModel.name];
                 SEL getter = proModel.getter;
                 if (NULL == getter) {continue;}
@@ -162,7 +162,8 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
                 @try {
                     value = [object valueForKey:ivarName];
                 } @catch (NSException *exception) {}
-                NSString *string = [NSString stringWithFormat:@"%@ = %@", ivarName, XZHDescriptionAddIndent(XZHGetObjectDescription(value).mutableCopy, 1)];
+                NSString *valueString = (value != nil) ? XZHDescriptionAddIndent(XZHGetObjectDescription(value).mutableCopy, 1) : @"unknown";
+                NSString *string = [NSString stringWithFormat:@"%@ = %@", ivarName, valueString];
                 [desc appendString:string];
                 [desc appendString:(propertyModelArray.count + 1 == max) ? @"\n" : @",\n"];
             }
@@ -203,7 +204,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
     __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[self class]];
-    while (clsModel) {
+    while (clsModel && clsModel.superCls != nil) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
             if (!proModel.setter || !proModel.getter) {continue;}
@@ -414,7 +415,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
     NSObject *newOne = [[selfClass alloc] init];
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
     __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:selfClass];
-    while (clsModel) {
+    while (clsModel && clsModel.superCls != nil) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
             if (!proModel.setter || !proModel.getter) {continue;}
@@ -630,7 +631,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
     
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
     __unsafe_unretained XZHClassModel *clsModel = [XZHClassModel classModelWithClass:[self class]];
-    while (clsModel) {
+    while (clsModel && clsModel.superCls != nil) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
             if (!proModel.setter || !proModel.getter) {continue;}
@@ -787,7 +788,7 @@ static NSString* XZHGetObjectDescription(NSObject *object) {
     
     NSUInteger _hash = 0;
     NSMutableArray *propertyModelArray = [[NSMutableArray alloc] initWithCapacity:32];
-    while (clsModel) {
+    while (clsModel && clsModel.superCls != nil) {
         for (__unsafe_unretained XZHPropertyModel *proModel in clsModel.propertyMap.allValues) {
             if (!proModel.name) {continue;}
             if (!proModel.setter || !proModel.getter) {continue;}

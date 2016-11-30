@@ -10,7 +10,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /**
- *  参考自https://github.com/nicklockwood/AutoCoding/blob/master/AutoCoding/AutoCoding.h
+ *  部分代码参考自AutoCoding
  */
 
 @interface NSObject (XZHArchived)
@@ -39,7 +39,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  *  @return
  */
-- (BOOL)writeToFile:(NSString *)filePath atomically:(BOOL)useAuxiliaryFile;
+- (BOOL)xzh_writeToFile:(NSString *)filePath atomically:(BOOL)useAuxiliaryFile;
 
 /**
  *  从指定路径文件解档成对象
@@ -48,7 +48,7 @@ NS_ASSUME_NONNULL_BEGIN
  *
  *  @return
  */
-+ (instancetype)objectWithContentsOfFile:(NSString *)path;
++ (instancetype)xzh_loadWithContentsOfFile:(NSString *)filePath;
 
 @end
 NS_ASSUME_NONNULL_END

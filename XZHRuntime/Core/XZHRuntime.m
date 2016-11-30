@@ -513,6 +513,10 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
         _imp = method_getImplementation(method);
         _selString = NSStringFromSelector(_sel);
         
+        if ([_selString isEqualToString:@".cxx_destruct"]) {
+            return nil; //all NSObjects have this method, clutters the dictionary
+        }
+        
         /**
          *  retrun type encoding
          *  这里不使用method_getReturnType(method, char *dst, size_t dst_len)，因为需要分配一个固定长度的字符串
