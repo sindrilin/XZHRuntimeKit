@@ -8,6 +8,6 @@
 
 #import "NSObject+XZHObjectMappingDatabase.h"
 
-@implementation NSObject (XZHObjectMappingDatabase)
+@implementation NSObject (XZHORM)
 
 @end

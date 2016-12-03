@@ -11,6 +11,7 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+//>>> 截取字符串
 static char* XZHSubstring(char* ch, size_t pos, size_t length) {
     char* pch=ch;
     char* subch=(char*)calloc(sizeof(char),length+1);
@@ -76,7 +77,7 @@ Class XZHGetNSBlockClass() {
     return NSBlock;
 }
 
-static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
+XZHFoundationType XZHGetFoundationType(Class cls) {
     if (NULL == cls) {return XZHFoundationTypeNone;}
     if ([cls isSubclassOfClass:[NSNull class]]) {return XZHFoundationTypeNSNull;}
     else if ([cls isSubclassOfClass:[NSMutableString class]]) {return XZHFoundationTypeNSMutableString;}
@@ -121,8 +122,122 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
 //    else if (cls == objc_getClass("__NSGlobalBlock__") || cls == objc_getClass("__NSMallocBlock__") || cls == objc_getClass("__NSStackBlock__")) {return XZHFoundationTypeNSBlock;}
 //    else if (obj == (id)kCFNull) {return XZHFoundationTypeNSNull;}
 //    else {return XZHFoundationTypeUnKnown;}//未知、自定义类型
-//    return XZHGetClassFoundationType([obj class]);
+//    return XZHGetFoundationType([obj class]);
 //}
+
+XZHTypeEncoding XZHGetTypeEncoding(const char *encodings) {
+    if (NULL == encodings) {return XZHTypeEncodingsUnKnown;}
+    size_t len = strlen(encodings);
+    if (len < 1) {return XZHTypeEncodingsUnKnown;}
+    char *tmpValue = (char *)malloc(sizeof(char) * len);
+    strcpy(tmpValue, encodings);
+    
+    XZHTypeEncoding type = XZHTypeEncodingsUnKnown;
+    switch (tmpValue[0]) {
+        case '?': {
+            type = XZHTypeEncodingsUnKnown;
+        }
+            break;
+        case '@': {
+            type = XZHTypeEncodingFoundationObject;
+        }
+            break;
+        case 'c': {//char
+            type = XZHTypeEncodingChar;
+        }
+            break;
+        case 'i': {//int
+            type = XZHTypeEncodingInt;
+        }
+            break;
+        case 's': {//short
+            type = XZHTypeEncodingShort;
+        }
+            break;
+        case 'l': {//long
+            type = XZHTypeEncodingLong32;
+        }
+            break;
+        case 'q': {//long long
+            type = XZHTypeEncodingLongLong;
+        }
+            break;
+        case 'C': {//unsigned char
+            type = XZHTypeEncodingUnsignedChar;
+        }
+            break;
+        case 'I': {//unsigned int
+            type = XZHTypeEncodingUnsignedInt;
+        }
+            break;
+        case 'S': {//unsigned short
+            type = XZHTypeEncodingUnsignedShort;
+        }
+            break;
+        case 'L': {//unsigned long
+            type = XZHTypeEncodingUnsignedLong;
+        }
+            break;
+        case 'Q': {//unsigned long long
+            type = XZHTypeEncodingUnsignedLongLong;
+        }
+            break;
+        case 'f': {//float
+            type = XZHTypeEncodingFloat;
+        }
+            break;
+        case 'd': {//double
+            type = XZHTypeEncodingDouble;
+        }
+            break;
+        case 'D': {//long double
+            type = XZHTypeEncodingLongLong;
+        }
+            break;
+        case 'B': {//A C++ bool or a C99 _Bool
+            type = XZHTypeEncodingBOOL;
+        }
+            break;
+        case 'v': {//void
+            type = XZHTypeEncodingVoid;
+        }
+            break;
+        case '*': {//char *
+            type = XZHTypeEncodingCString;
+        }
+            break;
+        case '#': {//Class
+            type = XZHTypeEncodingClass;
+        }
+            break;
+        case ':': {//SEL
+            type = XZHTypeEncodingSEL;
+        }
+            break;
+        case '[': {//char[6] >>> [array type]
+            type = XZHTypeEncodingCArray;
+        }
+            break;
+        case '{': {//struct >>> {Node=i^{Node}Bc}
+            type = XZHTypeEncodingCStruct;
+        }
+            break;
+        case '(': {//union
+            type = XZHTypeEncodingCUnion;
+        }
+            break;
+        case 'b': {//bit field 不使用
+            type = XZHTypeEncodingCBitFields;
+        }
+            break;
+        case '^': {//c 指针变量
+            type = XZHTypeEncodingCPointer;
+        }
+            break;
+    }
+    
+    return type;
+}
 
 @implementation XZHIvarModel {
     @package
@@ -192,7 +307,10 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
          */
         unsigned int num = 0;
         objc_property_attribute_t *atts = property_copyAttributeList(property, &num);
+        
         _typeEncoding = XZHTypeEncodingsUnKnown;
+        _foundationType = XZHFoundationTypeNone;
+        _isCNumber = NO;
         
         for (int i = 0; i < num; i++) {
             objc_property_attribute_t att = atts[i];
@@ -200,204 +318,189 @@ static xzh_force_inline XZHFoundationType XZHGetClassFoundationType(Class cls) {
                 case 'T': {
                     _ivarEncodingString = [NSString stringWithUTF8String:att.value];
                     size_t len = strlen(att.value);
-                    if (len < 1) {
-                        _foundationType = XZHFoundationTypeNone;
-                        _isCNumber = NO;
-                    } else {
-                        // len >= 1
-                        char *tmpValue = (char *)malloc(sizeof(char) * len);
-                        strcpy(tmpValue, att.value);
-                        if (len == 1) {
-                            _foundationType = XZHFoundationTypeNone;
-                            switch (tmpValue[0]) {
-                                case '?': {
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case 'c': {//char
-                                    _typeEncoding |= XZHTypeEncodingChar;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'i': {//int
-                                    _typeEncoding |= XZHTypeEncodingInt;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 's': {//short
-                                    _typeEncoding |= XZHTypeEncodingShort;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'l': {//long
-                                    _typeEncoding |= XZHTypeEncodingLong32;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'q': {//long long
-                                    _typeEncoding |= XZHTypeEncodingLongLong;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'C': {//unsigned char
-                                    _typeEncoding |= XZHTypeEncodingUnsignedChar;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'I': {//unsigned int
-                                    _typeEncoding |= XZHTypeEncodingUnsignedInt;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'S': {//unsigned short
-                                    _typeEncoding |= XZHTypeEncodingUnsignedShort;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'L': {//unsigned long
-                                    _typeEncoding |= XZHTypeEncodingUnsignedLong;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'Q': {//unsigned long long
-                                    _typeEncoding |= XZHTypeEncodingUnsignedLongLong;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'f': {//float
-                                    _typeEncoding |= XZHTypeEncodingFloat;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'd': {//double
-                                    _typeEncoding |= XZHTypeEncodingDouble;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'D': {//long double
-                                    _typeEncoding |= XZHTypeEncodingLongDouble;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'B': {//A C++ bool or a C99 _Bool
-                                    _typeEncoding |= XZHTypeEncodingBOOL;
-                                    _isCNumber = YES;
-                                }
-                                    break;
-                                case 'v': {//void
-                                    _typeEncoding |= XZHTypeEncodingVoid;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case '*': {//char *
-                                    _typeEncoding |= XZHTypeEncodingCString;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case '#': {//Class
-                                    _typeEncoding |= XZHTypeEncodingClass;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case ':': {//SEL
-                                    _typeEncoding |= XZHTypeEncodingSEL;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                            }
-                        } else {
-                            // len > 1
-                            switch (tmpValue[0]) {
-                                case '@': {
-                                    if (len == 2 && '?' == tmpValue[1]) {
-                                        _typeEncoding |= XZHTypeEncodingFoundationObject;
-                                        _foundationType = XZHFoundationTypeNSBlock;
-                                        _isCNumber = NO;
-                                    } else {
-                                        size_t *startArr = malloc(sizeof(size_t) * len/2.0);
-                                        size_t *endArr = malloc(sizeof(size_t) * len/2.0);
-                                        size_t idx = 0;
-                                        size_t tmp = 0;
-                                        while (idx < len) {
-                                            if (tmpValue[idx] == '<') {
-                                                startArr[tmp] = idx;
-                                            } else if (tmpValue[idx] == '>') {
-                                                endArr[tmp] = idx;
-                                                tmp++;
-                                            }
-                                            idx++;
-                                        }
-                                        
-                                        char *clsName = NULL;
-                                        if (0 == tmp) {
-                                            /**
-                                             *  NSArray属性类型一、@property (nonatomic, strong) NSArray *arr; >>> @\"NSArray\"
-                                             */
-                                            clsName = XZHSubstring(tmpValue, 2, len - 3);
-                                            _cls = objc_getClass(clsName);
-                                        } else {
-                                            /**
-                                             *  NSArray属性类型二、@property (nonatomic, strong) NSArray<协议1,协议2,协议3...> *arr; >>> type encoding == @\"NSArray<Animal><Animal2><Animal3>"
-                                             */
-                                            idx = 0;
-                                            NSMutableArray *protocols = [[NSMutableArray alloc] initWithCapacity:tmp];
-                                            while (idx < tmp) {
-                                                size_t start = startArr[idx];
-                                                size_t end = endArr[idx];
-                                                if (0 == idx) {
-                                                    clsName = XZHSubstring(tmpValue, 2, start - 2);
-                                                    _cls = objc_getClass(clsName);
-                                                }
-                                                char *protocol = NULL;
-                                                if (end >= start) {
-                                                    protocol = XZHSubstring(tmpValue, start + 1, end - start - 1);
-                                                    NSString *protocolStr = [NSString stringWithFormat:@"%s", protocol];
-                                                    if (protocolStr) {[protocols addObject:protocolStr];}
-                                                    free(protocol);protocol = NULL;
-                                                }
-                                                idx++;
-                                            }
-                                            _protocols = [protocols copy];
-                                        }
-                                        
-                                        _typeEncoding |= XZHTypeEncodingFoundationObject;
-                                        _foundationType = XZHGetClassFoundationType(_cls);
-                                        _isCNumber = NO;
-                                        free(clsName);clsName = NULL;
-                                        free(startArr);startArr = NULL;
-                                        free(endArr);endArr = NULL;
+                    if (len < 1) {continue;}
+                    char *tmpValue = (char *)malloc(sizeof(char) * len);
+                    strcpy(tmpValue, att.value);
+                    switch (tmpValue[0]) {
+//                        case '?': {
+//                        }
+//                            break;
+                        case '@': {
+                            _typeEncoding |= XZHTypeEncodingFoundationObject;
+                            
+                            if (2 == len&& '?' == tmpValue[1]) {
+                                _foundationType = XZHFoundationTypeNSBlock;
+                            } else {
+                                size_t *startArr = malloc(sizeof(size_t) * len/2.0);
+                                size_t *endArr = malloc(sizeof(size_t) * len/2.0);
+                                size_t idx = 0;
+                                size_t tmp = 0;
+                                while (idx < len) {
+                                    if (tmpValue[idx] == '<') {
+                                        startArr[tmp] = idx;
+                                    } else if (tmpValue[idx] == '>') {
+                                        endArr[tmp] = idx;
+                                        tmp++;
                                     }
+                                    idx++;
                                 }
-                                    break;
-                                case '[': {//char[6] >>> [array type]
-                                    _typeEncoding |= XZHTypeEncodingCArray;
-                                    _isCNumber = NO;
+                                
+                                char *clsName = NULL;
+                                if (0 == tmp) {
+                                    /**
+                                     *  NSArray属性类型一、@property (nonatomic, strong) NSArray *arr; >>> @\"NSArray\"
+                                     */
+                                    clsName = XZHSubstring(tmpValue, 2, len - 3);
+                                    _cls = objc_getClass(clsName);
+                                } else {
+                                    /**
+                                     *  NSArray属性类型二、@property (nonatomic, strong) NSArray<协议1,协议2,协议3...> *arr; >>> type encoding == @\"NSArray<Animal><Animal2><Animal3>"
+                                     */
+                                    idx = 0;
+                                    NSMutableArray *protocols = [[NSMutableArray alloc] initWithCapacity:tmp];
+                                    while (idx < tmp) {
+                                        size_t start = startArr[idx];
+                                        size_t end = endArr[idx];
+                                        if (0 == idx) {
+                                            clsName = XZHSubstring(tmpValue, 2, start - 2);
+                                            _cls = objc_getClass(clsName);
+                                        }
+                                        char *protocol = NULL;
+                                        if (end >= start) {
+                                            protocol = XZHSubstring(tmpValue, start + 1, end - start - 1);
+                                            NSString *protocolStr = [NSString stringWithFormat:@"%s", protocol];
+                                            if (protocolStr) {[protocols addObject:protocolStr];}
+                                            free(protocol);protocol = NULL;
+                                        }
+                                        idx++;
+                                    }
+                                    _protocols = [protocols copy];
                                 }
-                                    break;
-                                case '{': {//struct >>> {Node=i^{Node}Bc}
-                                    _typeEncoding |= XZHTypeEncodingCStruct;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case '(': {//union
-                                    _typeEncoding |= XZHTypeEncodingCUnion;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case 'b': {//bit field 不使用
-                                    _typeEncoding |= XZHTypeEncodingCBitFields;
-                                    _isCNumber = NO;
-                                }
-                                    break;
-                                case '^': {//c 指针变量
-                                    _typeEncoding |= XZHTypeEncodingCPointer;
-                                    _isCNumber = NO;
-                                }
-                                    break;
+                                
+                                _foundationType = XZHGetFoundationType(_cls);
+                                free(clsName);clsName = NULL;
+                                free(startArr);startArr = NULL;
+                                free(endArr);endArr = NULL;
                             }
                         }
-                        free(tmpValue);tmpValue = NULL;
+                            break;
+                        case 'c': {//char
+                            _typeEncoding |= XZHTypeEncodingChar;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'i': {//int
+                            _typeEncoding |= XZHTypeEncodingInt;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 's': {//short
+                            _typeEncoding |= XZHTypeEncodingShort;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'l': {//long
+                            _typeEncoding |= XZHTypeEncodingLong32;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'q': {//long long
+                            _typeEncoding |= XZHTypeEncodingLongLong;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'C': {//unsigned char
+                            _typeEncoding |= XZHTypeEncodingUnsignedChar;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'I': {//unsigned int
+                            _typeEncoding |= XZHTypeEncodingUnsignedInt;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'S': {//unsigned short
+                            _typeEncoding |= XZHTypeEncodingUnsignedShort;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'L': {//unsigned long
+                            _typeEncoding |= XZHTypeEncodingUnsignedLong;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'Q': {//unsigned long long
+                            _typeEncoding |= XZHTypeEncodingUnsignedLongLong;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'f': {//float
+                            _typeEncoding |= XZHTypeEncodingFloat;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'd': {//double
+                            _typeEncoding |= XZHTypeEncodingDouble;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'D': {//long double
+                            _typeEncoding |= XZHTypeEncodingLongDouble;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'B': {//A C++ bool or a C99 _Bool
+                            _typeEncoding |= XZHTypeEncodingBOOL;
+                            _isCNumber = YES;
+                        }
+                            break;
+                        case 'v': {//void
+                            _typeEncoding |= XZHTypeEncodingVoid;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '*': {//char *
+                            _typeEncoding |= XZHTypeEncodingCString;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '#': {//Class
+                            _typeEncoding |= XZHTypeEncodingClass;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case ':': {//SEL
+                            _typeEncoding |= XZHTypeEncodingSEL;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '[': {//char[6] >>> [array type]
+                            _typeEncoding |= XZHTypeEncodingCArray;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '{': {//struct >>> {Node=i^{Node}Bc}
+                            _typeEncoding |= XZHTypeEncodingCStruct;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '(': {//union
+                            _typeEncoding |= XZHTypeEncodingCUnion;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case 'b': {//bit field 不使用
+                            _typeEncoding |= XZHTypeEncodingCBitFields;
+                            _isCNumber = NO;
+                        }
+                            break;
+                        case '^': {//c 指针变量
+                            _typeEncoding |= XZHTypeEncodingCPointer;
+                            _isCNumber = NO;
+                        }
+                            break;
                     }
+                    free(tmpValue);tmpValue = NULL;
                 }
                     break;
                 case 'V': {
@@ -689,7 +792,7 @@ static dispatch_semaphore_t semaphore = NULL;
         _cls = cls;
         _clsName = NSStringFromClass(cls);
         _isMeta = class_isMetaClass(cls);
-        _foundationType = XZHGetClassFoundationType(cls);
+        _foundationType = XZHGetFoundationType(cls);
         [self _parse];
         
         // super class

@@ -8,6 +8,6 @@
 
 #import <Foundation/Foundation.h>
 
-@interface NSObject (XZHObjectMappingDatabase)
+@interface NSObject (XZHORM)
 
 @end

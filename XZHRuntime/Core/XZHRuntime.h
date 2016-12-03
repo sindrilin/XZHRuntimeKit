@@ -12,14 +12,6 @@
 
 #define xzh_force_inline __inline__ __attribute__((always_inline))
 
-Class XZHGetNSBlockClass();
-
-typedef id (^XZHWeakRefrenceBlock)(void);
-XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj);
-id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block);
-
-BOOL XZHClassRespondsToSelector(Class cls, SEL sel);
-
 /**
  * 
  ************************************************************************************************
@@ -395,3 +387,14 @@ typedef NS_ENUM(NSInteger, XZHFoundationType) {
 
 - (BOOL)isEqualToClassModel:(XZHClassModel *)clsModel;
 @end
+
+XZHTypeEncoding XZHGetTypeEncoding(const char *encodings);
+XZHFoundationType XZHGetFoundationType(Class cls);
+
+Class XZHGetNSBlockClass();
+
+typedef id (^XZHWeakRefrenceBlock)(void);
+XZHWeakRefrenceBlock XZHMakeWeakRefrenceWithObject(id obj);
+id XZHGetWeakRefrenceObject(XZHWeakRefrenceBlock block);
+
+BOOL XZHClassRespondsToSelector(Class cls, SEL sel);
